@@ -1,18 +1,72 @@
-fn main() {
-    println!("Hello, world!");
+use std::collections::HashMap;
+use std::sync::mpsc;
+use std::time::Instant;
+use std::thread;
+
+struct MsgSignal {
+    chan: String,
+    msg: String,
 }
 
-/*
+struct ChanSignal {
+    chan: String,
+    valid_until: Instant,
+}
 
-c/hub:main
-c/hub:cw
-c/stage:10156
-f/intl:boybook
-f/chn:whateverid
-f/admin:server
+struct MsgServiceFactory {
+    log_tx: mpsc::Sender<LogSignal>,
+}
 
-every channel(c) and flair(f) have a valid time span
-called 'valid until', in UTC time
+struct MsgServiceHandler {
+    log_tx: mpsc::Sender<LogSignal>,
+    ws_sender: ws::Sender,
+}
 
+impl MsgServiceFactory {
+    pub fn new(log_tx: mpsc::Sender<LogSignal>) -> Self {
+        log_tx.send(LogSignal::ModuleStart(String::from("Message service"))).unwrap();
+        Self { log_tx }
+    }
+}
 
- */
+impl ws::Factory for MsgServiceFactory {
+    type Handler = MsgServiceHandler;
+    fn connection_made(&mut self, ws_sender: ws::Sender) -> Self::Handler {
+        Self::Handler { ws_sender, log_tx: self.log_tx.clone() }
+    }
+}
+
+impl ws::Handler for MsgServiceHandler {
+
+}
+
+#[derive(Debug)]
+enum LogSignal {
+    ModuleStart(String)
+}
+
+fn main() {
+    let (log_tx, log_rx) = mpsc::channel();
+    thread::spawn(move || {
+        while let Ok(sig) = log_rx.recv() {
+            println!("{:?}", sig);
+        }
+    });
+    let addr = "0.0.0.0:6500";
+    let log_tx1 = log_tx.clone();
+    thread::spawn(move || {
+        let fac = MsgServiceFactory::new(log_tx1);
+        ws::WebSocket::new(fac).unwrap()
+            .listen(addr).unwrap()
+    });
+    loop {
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).unwrap();
+        match input.trim() {
+            "q" => {    
+                std::process::exit(0);
+            },
+            _ => {}
+        }
+}
+}
