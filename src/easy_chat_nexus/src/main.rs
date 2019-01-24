@@ -42,7 +42,8 @@ impl ws::Handler for MsgServiceHandler {
 
 #[derive(Debug)]
 enum LogSignal {
-    ModuleStart(String)
+    ModuleStart(String),
+    ShutdownRequest(),
 }
 
 fn main() {
@@ -63,10 +64,8 @@ fn main() {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
         match input.trim() {
-            "q" => {    
-                std::process::exit(0);
-            },
+            "q" => log_tx.send(LogSignal::ShutdownRequest()).unwrap(),
             _ => {}
         }
-}
+    }
 }
