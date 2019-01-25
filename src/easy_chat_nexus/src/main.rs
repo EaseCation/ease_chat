@@ -3,16 +3,6 @@ use std::sync::mpsc;
 use std::time::Instant;
 use std::thread;
 
-struct MsgSignal {
-    chan: String,
-    msg: String,
-}
-
-struct ChanSignal {
-    chan: String,
-    valid_until: Instant,
-}
-
 struct MsgServiceFactory {
     log_tx: mpsc::Sender<LogSignal>,
 }
@@ -66,6 +56,17 @@ enum LogSignal {
     ConnectionOpen(String),
     ConnectionClose(String, ws::CloseCode, String),
     ShutdownRequest(),
+}
+
+enum MsgSignal {
+    Text {
+        chan: String,
+        msg: String,
+    },
+    Chan {
+        chan: String,
+        valid_until: Instant,
+    }
 }
 
 fn main() {
