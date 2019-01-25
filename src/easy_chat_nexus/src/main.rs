@@ -50,9 +50,14 @@ impl ws::Handler for MsgServiceHandler {
         self.log_tx.send(LogSignal::ConnectionClose(self.client_addr.clone().unwrap(), code, String::from(reason))).unwrap()
     }
 
-    // fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
-    //     unimplemented!()
-    // }
+    fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
+        if let ws::Message::Text(s) = msg {
+            // do sth
+            Ok(())
+        } else {
+            self.ws_sender.close_with_reason(ws::CloseCode::Unsupported, "Please input as string text")
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -73,9 +78,12 @@ fn main() {
                     println!("Shutting down...");
                     std::process::exit(0)
                 },
-                ModuleStart(meta) => println!("[Module {}] Started!", meta),
-                ConnectionOpen(client_addr) => println!("[Client {}] Connection open!", client_addr),
-                ConnectionClose(addr, code, reason) => println!("[Client {}] Connection closed, Code:[{:?}], Resion:[{}]", addr, code, reason),
+                ModuleStart(meta) => 
+                    println!("[Module {}] Started!", meta),
+                ConnectionOpen(client_addr) => 
+                    println!("[Client {}] Connection open!", client_addr),
+                ConnectionClose(addr, code, reason) => 
+                    println!("[Client {}] Connection closed, Code:[{:?}], Resion:[{}]", addr, code, reason),
                 _ => {}
             }
         }
