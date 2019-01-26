@@ -55,6 +55,13 @@ impl Env {
         }
         Ok(cnt)
     }
+
+    pub fn remove_ep(&mut self, ep_id: String) {
+        self.ep.write().unwrap().remove(&ep_id);
+        for (_chan, map) in self.chan.write().unwrap().iter_mut() {
+            map.retain(|inner_ep_id, _instant_sender| &ep_id != inner_ep_id);
+        }
+    }
 }
 
 struct MsgServiceFactory {
@@ -100,7 +107,7 @@ impl ws::Handler for MsgServiceHandler {
     }
 
     fn on_close(&mut self, code: ws::CloseCode, reason: &str) {
-        self.log_tx.send(LogSignal::ConnectionClose(self.ep_id.clone(), code, String::from(reason))).unwrap()
+        self.msg_tx.send(MsgSignal::EpLogout { ep_id: self.ep_id.clone(), code, reason: reason.to_string() }).unwrap();
     }
 
     fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
@@ -236,6 +243,11 @@ enum MsgSignal {
         chan_id: String,
         valid_until_sec: u64,
         valid_until_nanos: u64,
+    },
+    EpLogout {
+        ep_id: Option<String>,
+        code: ws::CloseCode,
+        reason: String,
     }
 }
 
@@ -279,6 +291,12 @@ fn main() {
                 EpIdentify { ep_id, ws_sender } => {
                     env.add_ep(ep_id.clone(), ws_sender);
                     log_tx1.send(LogSignal::ConnectionIdentified(ep_id)).unwrap();
+                },
+                EpLogout { ep_id, code, reason } => {
+                    if let Some(ep_id) = ep_id.clone() {
+                        env.remove_ep(ep_id);
+                    }
+                    log_tx1.send(LogSignal::ConnectionClose(ep_id, code, String::from(reason))).unwrap()
                 },
                 Chan { src_ep_id, chan_id, valid_until_sec, valid_until_nanos } => {
                     if let Some(expire) = env.ep_reg_chan(src_ep_id.clone(), chan_id.clone(), valid_until_sec, valid_until_nanos) {
