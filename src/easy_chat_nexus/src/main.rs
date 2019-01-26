@@ -1,37 +1,65 @@
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::thread;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{mpsc, Arc, RwLock},
+    thread,
+    time::{Instant, Duration},
+};
 
 #[derive(Clone)]
 struct Env {
-    ep: Arc<Mutex<HashMap<String, ws::Sender>>>,
-    chan: Arc<Mutex<HashMap<String, Vec<String>>>>, // chan_id -> ep_id
+    ep: Arc<RwLock<HashMap<String, ws::Sender>>>,
+    chan: Arc<RwLock<HashMap<String, HashMap<String, (Instant, ws::Sender)>>>>, // chan_id -> ep
 }
 
 impl Env {
     pub fn new() -> Self {
         Env {
-            ep: Arc::new(Mutex::new(HashMap::new())),
-            chan: Arc::new(Mutex::new(HashMap::new()))
+            ep: Arc::new(RwLock::new(HashMap::new())),
+            chan: Arc::new(RwLock::new(HashMap::new()))
         }
     } 
 
     pub fn add_ep(&mut self, ep_id: String, sender: ws::Sender) {
-        if let Ok(mut map) = self.ep.lock() {
+        if let Ok(mut map) = self.ep.write() {
             map.insert(ep_id, sender);
         }
     }
 
-    // pub fn ep_reg_chan    
+    pub fn ep_reg_chan(&mut self, ep_id: String, chan_id: String, time_sec: u64, time_nanos: u64) -> Option<Instant> {
+        if let Some(sender) = self.ep.read().unwrap().get(&ep_id) {
+            let expire = Instant::now() + Duration::from_secs(time_sec) + Duration::from_nanos(time_nanos);
+            self.chan.write().unwrap().entry(chan_id).or_insert(HashMap::new()).insert(ep_id, (expire, sender.clone()));
+            Some(expire)
+        } else {
+            None
+        }
+    }    
+
+    pub fn push_text(&mut self, src_ep_id: String, chan_id: String, text: String) -> ws::Result<usize> {
+        let map = self.chan.read().unwrap();
+        let now = Instant::now();
+        let mut cnt = 0;
+        if let Some(senders) = map.get(&chan_id) {
+            for (ep_id, (valid_until, sender)) in senders.iter() {
+                if valid_until >= &now {
+                    if ep_id != &src_ep_id  {
+                        sender.send(format!("1r|{}|{}", text.len(), text))?;
+                        cnt += 1;
+                    }
+                } else {
+                    if let Some(mp) = self.chan.write().unwrap().get_mut(&chan_id) {
+                        mp.remove(ep_id);
+                    }
+                }
+            }
+        }
+        Ok(cnt)
+    }
 }
 
 struct MsgServiceFactory {
     log_tx: mpsc::Sender<LogSignal>,
     msg_tx: mpsc::Sender<MsgSignal>,
-    env: Env,
 }
 
 #[derive(Clone)]
@@ -40,13 +68,12 @@ struct MsgServiceHandler {
     msg_tx: mpsc::Sender<MsgSignal>,
     ws_sender: ws::Sender,
     ep_id: Option<String>,
-    env: Env,
 }
 
 impl MsgServiceFactory {
-    pub fn new(log_tx: mpsc::Sender<LogSignal>, msg_tx: mpsc::Sender<MsgSignal>, env: Env) -> Self {
+    pub fn new(log_tx: mpsc::Sender<LogSignal>, msg_tx: mpsc::Sender<MsgSignal>) -> Self {
         log_tx.send(LogSignal::ModuleStart(String::from("MSG-SERV"))).unwrap();
-        Self { log_tx, msg_tx, env }
+        Self { log_tx, msg_tx }
     }
 }
 
@@ -58,7 +85,6 @@ impl ws::Factory for MsgServiceFactory {
             log_tx: self.log_tx.clone(), 
             msg_tx: self.msg_tx.clone(), 
             ep_id: None,
-            env: self.env.clone()
         }
     }
 }
@@ -107,13 +133,19 @@ impl MsgServiceHandler {
             (Some('h'), Some('|')) => self.handle_v1_handshake(text),
             (Some('t'), Some('|')) => self.handle_v1_text(text),
             (Some('c'), Some('|')) => self.handle_v1_chan(text),
-            _ => self.ws_sender.close_with_reason(ws::CloseCode::Invalid, "Invalid message type: expected 't' or 'c'"),
+            _ => self.ws_sender.close_with_reason(ws::CloseCode::Invalid, "Invalid message type: expected 'h', 't' or 'c'"),
         }
     }
 
     #[inline]
     fn read_number(text: &mut VecDeque<char>) -> u64 {
         let mut cur = text.pop_front();
+        while let Some(c) = cur {
+            if c.to_digit(10).is_some() {
+                break;
+            } 
+            cur = text.pop_front();
+        }
         let mut ans = 0;
         while let Some(c) = cur {
             if let Some(digit) = c.to_digit(10) {
@@ -144,8 +176,7 @@ impl MsgServiceHandler {
     fn handle_v1_handshake(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
         let ep_id = Self::read_string(&mut text);
         self.ep_id = Some(ep_id.clone());
-        self.env.add_ep(ep_id.clone(), self.ws_sender.clone());
-        self.log_tx.send(LogSignal::ConnectionIdentified(ep_id)).unwrap();
+        self.msg_tx.send(MsgSignal::EpIdentify { ep_id: ep_id.clone(), ws_sender: self.ws_sender.clone() }).unwrap();
         Ok(())
     }
 
@@ -154,8 +185,9 @@ impl MsgServiceHandler {
     fn handle_v1_text(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
         if let Some(src_ep_id) = self.ep_id.clone() {
             let chan_id = Self::read_string(&mut text);
-            let msg = Self::read_string(&mut text);
-            self.msg_tx.send(MsgSignal::Text { src_ep_id, chan_id, msg }).unwrap();
+            let text = Self::read_string(&mut text);
+            println!("{}, {}!", chan_id, text);
+            self.msg_tx.send(MsgSignal::Text { src_ep_id, chan_id, text }).unwrap();
             Ok(())
         } else {
             self.ws_sender.close_with_reason(ws::CloseCode::Status, "Connection unidentified")
@@ -184,14 +216,20 @@ enum LogSignal {
     ConnectionOpen(String),
     ConnectionIdentified(String),
     ConnectionClose(Option<String>, ws::CloseCode, String),
+    ChannelAdd(String, String, Instant),
+    MessageSent(String, String, usize, String),
     ShutdownRequest(),
 }
 
 enum MsgSignal {
+    EpIdentify {
+        ep_id: String,
+        ws_sender: ws::Sender,
+    },
     Text {
         src_ep_id: String,
         chan_id: String,
-        msg: String,
+        text: String,
     },
     Chan {
         src_ep_id: String,
@@ -204,6 +242,7 @@ enum MsgSignal {
 fn main() {
     let (log_tx, log_rx) = mpsc::channel();
     let (msg_tx, msg_rx) = mpsc::channel();
+    let mut env = Env::new();
     thread::spawn(move || {
         while let Ok(sig) = log_rx.recv() {
             use LogSignal::*;
@@ -224,16 +263,43 @@ fn main() {
                     } else { 
                         println!("[Unidentified Client] Connection closed, Code:[{:?}], Reason:[{}]", code, reason)
                     }
-                }
+                },
+                ChannelAdd(src_ep_id, chan_id, expire) => 
+                    println!("[Client EPID {}] Registered new channel [{}], expire at {:?}", src_ep_id, chan_id, expire),
+                MessageSent(src_ep_id, chan_id, ep_cnt, text) => 
+                    println!("[Client EPID {}] Sent to {} [{} other client(s)]: {}", src_ep_id, chan_id, ep_cnt, text),
             }
+        }
+    });
+    let log_tx1 = log_tx.clone();
+    thread::spawn(move || {
+        while let Ok(sig) = msg_rx.recv() {
+            use MsgSignal::*;
+            match sig {
+                EpIdentify { ep_id, ws_sender } => {
+                    env.add_ep(ep_id.clone(), ws_sender);
+                    log_tx1.send(LogSignal::ConnectionIdentified(ep_id)).unwrap();
+                },
+                Chan { src_ep_id, chan_id, valid_until_sec, valid_until_nanos } => {
+                    if let Some(expire) = env.ep_reg_chan(src_ep_id.clone(), chan_id.clone(), valid_until_sec, valid_until_nanos) {
+                        log_tx1.send(LogSignal::ChannelAdd(src_ep_id, chan_id, expire)).unwrap();
+                    }
+                },
+                Text { src_ep_id, chan_id, text } => {
+                    if let Ok(ep_cnt) = env.push_text(src_ep_id.clone(), chan_id.clone(), text.clone()) {
+                        log_tx1.send(LogSignal::MessageSent(src_ep_id, chan_id, ep_cnt, text)).unwrap();
+                    } else {
+                        eprintln!("error!");
+                    };
+                },
+            };
         }
     });
     let addr = "0.0.0.0:6500";
     let log_tx1 = log_tx.clone();
     let msg_tx1 = msg_tx.clone();
-    let env = Env::new();
     thread::spawn(move || {
-        let fac = MsgServiceFactory::new(log_tx1, msg_tx1, env);
+        let fac = MsgServiceFactory::new(log_tx1, msg_tx1);
         ws::WebSocket::new(fac).unwrap()
             .listen(addr).unwrap()
     });
