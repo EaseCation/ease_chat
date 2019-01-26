@@ -43,7 +43,7 @@ impl Env {
             for (ep_id, (valid_until, sender)) in senders.iter() {
                 if valid_until >= &now {
                     if ep_id != &src_ep_id  {
-                        sender.send(format!("1r|{}|{}", text.len(), text))?;
+                        sender.send(format!("1r|{}|{}|{}|{}", src_ep_id.len(), src_ep_id, text.len(), text))?;
                         cnt += 1;
                     }
                 } else {
