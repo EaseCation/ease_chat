@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>net.easecation</groupId>
-    <artifactId>easechat-client</artifactId>
+    <artifactId>easechat-client-j</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <build>

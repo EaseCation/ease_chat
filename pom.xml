@@ -10,7 +10,7 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>src/client_java</module>
+        <module>src/easechat-client-j</module>
     </modules>
 
 </project>
