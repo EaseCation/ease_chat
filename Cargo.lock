@@ -23,11 +23,7 @@ version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "easy_chat_client"
-version = "0.1.0"
-
-[[package]]
-name = "easy_chat_nexus"
+name = "ease_chat_nexus"
 version = "0.1.0"
 dependencies = [
  "ws 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",

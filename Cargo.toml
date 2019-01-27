@@ -1,5 +1,4 @@
 [workspace]
 members = [
-    "src/easy_chat_client",
-    "src/easy_chat_nexus",
+    "src/nexus_rust"
 ]
