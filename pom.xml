@@ -9,25 +9,8 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <build>
-        <sourceDirectory>src/client_java/src/java</sourceDirectory>
-        <testSourceDirectory>src/client_java/test/java</testSourceDirectory>
-        <resources>
-            <resource>
-                <directory>src/client_java/src/resources</directory>
-                <excludes>
-                    <exclude>**/*.java</exclude>
-                </excludes>
-            </resource>
-        </resources>
-        <testResources>
-            <testResource>
-                <directory>src/client_java/test/resources</directory>
-                <excludes>
-                    <exclude>**/*.java</exclude>
-                </excludes>
-            </testResource>
-        </testResources>
-    </build>
+    <modules>
+        <module>src/client_java</module>
+    </modules>
 
 </project>

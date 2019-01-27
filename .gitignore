@@ -2,4 +2,4 @@
 **/*.rs.bk
 .idea/
 _server/
-ease_chat.iml
+**/*.iml
