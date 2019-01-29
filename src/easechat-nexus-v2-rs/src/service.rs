@@ -25,3 +25,19 @@ impl Service {
         
     }
 }
+
+// pub enum Signal {
+//     Identify {
+//         id: String,
+//         sender: Sender,
+//     },
+//     Listen {
+//         src_id: String,
+//         target_id: String,
+//         valid_sec: u64,
+//         valid_nanos: u64,
+//     },
+//     Push {
+//         src_
+//     }
+// }
