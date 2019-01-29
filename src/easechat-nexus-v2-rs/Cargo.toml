@@ -1,0 +1,8 @@
+[package]
+name = "easechat-nexus"
+version = "0.0.0"
+authors = ["luojia65 <me@luojia.cc>"]
+edition = "2018"
+
+[dependencies]
+ws = "*"

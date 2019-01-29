@@ -24,9 +24,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "ease_chat_nexus"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "ws 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "easechat-nexus"
+version = "0.0.0"
+dependencies = [
+ "ws 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "easechat-nexus-exec"
+version = "0.0.0"
+dependencies = [
+ "easechat-nexus 0.0.0",
 ]
 
 [[package]]
