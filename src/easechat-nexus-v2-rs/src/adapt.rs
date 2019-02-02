@@ -2,8 +2,15 @@ use super::service;
 use std::collections::VecDeque;
 
 pub(crate) struct WsFactoryAdapt<F> {
-    inner: F
+    inner: F,
+    srv: service::Service,
 }
+
+impl<F> WsFactoryAdapt<F> {
+    fn new(inner: F, srv: service::Service) -> Self {
+        Self { inner, srv }
+    }
+} 
 
 impl<F> ws::Factory for WsFactoryAdapt<F> 
 where 
@@ -13,7 +20,7 @@ where
 
     fn connection_made(&mut self, sender: ws::Sender) -> Self::Handler {
         let inner = self.inner.connection_made(super::Sender { inner: sender.clone() });
-        WsHandlerAdapt { inner, ws_sender: sender, echat_id: None }
+        WsHandlerAdapt { inner, ws_sender: sender, echat_id: None, srv: self.srv.clone() }
     }
     
     fn connection_lost(&mut self, handler: Self::Handler) {
@@ -24,6 +31,7 @@ where
 pub struct WsHandlerAdapt<H> {
     inner: H,
     ws_sender: ws::Sender,
+    srv: service::Service,
     echat_id: Option<String>
 }
 
@@ -87,28 +95,41 @@ impl<H> WsHandlerAdapt<H> {
     #[inline]
     fn handle_message_signal(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
         match text.pop_front() {
-            Some('2') => self.handle_v2(text),
+            Some('1') => self.handle_v1(text),
             _ => self.ws_sender.close_with_reason(ws::CloseCode::Protocol, "Protocol not supported")
         }
     }
 
     #[inline]
-    fn handle_v2(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
+    fn handle_v1(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
         match (text.pop_front(), text.pop_front()) {
-            (Some('i'), Some('|')) => self.handle_v2_identify(text),
-            // (Some('l'), Some('|')) => self.handle_v2_listen_channel(text),
+            (Some('h'), Some('|')) => self.handle_v1_handshake(text),
+            // (Some('c'), Some('|')) => self.handle_v1_listen_channel(text),
             // (Some('p'), Some('|')) => self.handle_v2_push_message(text),
-            // (Some('a'), Some('|')) => self.handle_v2_accept_message(text),
             _ => self.ws_sender.close_with_reason(ws::CloseCode::Invalid, "Invalid message type"),
         }
     }
 
     #[inline]
-    fn handle_v2_identify(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
+    fn handle_v1_handshake(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
         let id = read_string(&mut text);
-        self.echat_id = Some(id);
-        unimplemented!("adapt to crate::service")
+        self.echat_id = Some(id.clone());
+        self.srv.register_client(id, super::Sender::new(self.ws_sender.clone()));
+        Ok(())
     }
+
+    // #[inline]
+    // fn handle_v1_listen_channel(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
+    //     if let Some(src_id) = self.echat_id.clone() {
+    //         let chan_id = read_string(&mut text);
+    //         let valid_until_sec = read_number(&mut text);
+    //         let valid_until_nanos = read_number(&mut text);
+    //         self.msg_tx.send(MsgSignal::Chan { src_id, chan_id, valid_until_sec, valid_until_nanos }).unwrap();
+    //         Ok(())
+    //     } else {
+    //         self.ws_sender.close_with_reason(ws::CloseCode::Status, "Connection unidentified")
+    //     }
+    // }
 
 }
 

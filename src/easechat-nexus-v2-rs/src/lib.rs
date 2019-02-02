@@ -5,7 +5,8 @@ pub struct EaseChat<F>
 where
     F: Factory
 {
-    inner: ws::WebSocket<adapt::WsFactoryAdapt<F>>,
+    socket: ws::WebSocket<adapt::WsFactoryAdapt<F>>,
+    srv: service::Service,
 }
 
 impl<F> EaseChat<F>
@@ -44,4 +45,15 @@ pub struct Handshake {
 #[derive(Clone)]
 pub struct Sender {
     inner: ws::Sender,
+}
+
+impl Sender {
+    fn new(inner: ws::Sender) -> Self {
+        Self { inner }
+    }
+
+    pub fn send_msg(&self, src_id: &str, dest_id: &str, msg: &str) -> ws::Result<()> {
+        let string = format!("1r|{}|{}|{}|{}|{}|{}", src_id.len(), src_id, dest_id.len(), dest_id, msg.len(), msg); 
+        self.inner.send(string)
+    }  
 }
