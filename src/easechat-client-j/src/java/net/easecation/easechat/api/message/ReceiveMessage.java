@@ -1,0 +1,75 @@
+package net.easecation.easechat.api.message;
+
+import net.easecation.easechat.api.Message;
+
+/*
+* 消息接收数据 封装
+* */
+public class ReceiveMessage implements Message {
+    private String text;
+    private String channelName;
+    private String form;
+
+    public static ReceiveMessage valueOf(String source){
+        String[] data = source.split("\\|",7);
+
+        if (!data[0].equals(MESSAGE_RECEIVE)){
+            throw new IllegalArgumentException("协议头有误");
+        }
+        if (data[2].getBytes().length != Integer.valueOf(data[1])){
+            throw new IllegalArgumentException("协议头有误");
+        }
+
+        if (data[4].getBytes().length != Integer.valueOf(data[3])){
+            throw new IllegalArgumentException("协议头有误");
+        }
+
+        if (data[6].getBytes().length != Integer.valueOf(data[5])){
+            throw new IllegalArgumentException("协议头有误");
+        }
+
+        return new ReceiveMessage(data[2], data[4], data[6]);
+    }
+
+    private ReceiveMessage(String form, String channelName, String text){
+        this.form = form;
+        this.channelName = channelName;
+        this.text = text;
+    }
+
+    public String getForm() {
+        return form;
+    }
+
+    public String getChannelName() {
+        return channelName;
+    }
+
+    public String getText() {
+        return text;
+    }
+
+    @Override
+    public int getMessageLength() {
+        return text.getBytes().length;
+    }
+
+    @Override
+    public String getMessageType() {
+        return Message.MESSAGE_RECEIVE;
+    }
+
+    @Override
+    public String toString() {
+        return String.join(
+                "|",
+                getMessageType(),
+                String.valueOf(form.getBytes().length),
+                form,
+                String.valueOf(channelName.getBytes().length),
+                channelName,
+                String.valueOf(text.getBytes().length),
+                text
+        );
+    }
+}
