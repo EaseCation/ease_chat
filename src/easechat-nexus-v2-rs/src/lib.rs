@@ -20,6 +20,16 @@ pub trait Factory {
 
     fn connection_made(&mut self, _: Sender) -> Self::Handler;
 
+    #[inline]
+    fn client_connected(&mut self, ws: Sender) -> Self::Handler {
+        self.connection_made(ws)
+    }
+
+    #[inline]
+    fn server_connected(&mut self, ws: Sender) -> Self::Handler {
+        self.connection_made(ws)
+    }
+
     fn connection_lost(&mut self, _: Self::Handler) {}
 }
 
@@ -28,7 +38,7 @@ pub trait Handler {
 
     fn on_close(&mut self) {}
 
-    fn on_identify(&mut self, _id: String) {}
+    fn on_handshake(&mut self, _id: String) {}
 
     fn on_listen_channel(&mut self, _target_id: String) {}
 

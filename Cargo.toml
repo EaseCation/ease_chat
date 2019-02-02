@@ -2,5 +2,5 @@
 members = [
     "src/easechat-nexus-rs",
     "src/easechat-nexus-v2-rs",
-    "src/easechat-nexus-exec-rs"
+    "src/easechat-exec-rs"
 ]

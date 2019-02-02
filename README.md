@@ -12,4 +12,4 @@ This implementation is written in rust version 1.32.0-stable.
 
 ## Protocol specification
 
-[中文协议文档](https://github.com/EaseCation/ease_chat/blob/master/protocol-ch.md)
+[中文协议文档](https://github.com/EaseCation/ease_chat/blob/master/protocol-zh.md)
