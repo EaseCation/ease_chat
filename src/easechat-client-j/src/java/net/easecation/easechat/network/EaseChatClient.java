@@ -9,6 +9,7 @@ import io.netty.handler.codec.http.websocketx.*;
 
 import net.easecation.easechat.api.MessageReceiver;
 import net.easecation.easechat.api.MessageSender;
+import net.easecation.easechat.api.message.ChannelMessage;
 
 import java.net.URI;
 import java.util.logging.Logger;
@@ -21,6 +22,16 @@ public class EaseChatClient {
     private MessageReceiver receiver;
     private Logger logger;
     private URI websocketURI;
+    private ChannelMessage[] initChannelMessages;
+
+    public ChannelMessage[] getInitChannelMessage() {
+        if (initChannelMessages == null) return new ChannelMessage[]{};
+
+        ChannelMessage[] channelMessages = initChannelMessages.clone();
+        initChannelMessages = null;
+
+        return channelMessages;
+    }
 
     /*
      * name 用与 向服务端发起1h握手协议时必须带的参数
@@ -34,6 +45,12 @@ public class EaseChatClient {
 
         this.websocketURI = websocketURI;
         this.receiver = new MessageReceiver(this, listener);
+    }
+
+    public EaseChatClient(String name, URI websocketURI, ChannelMessage[] messages, MessageReceiver.Listener listener){
+        this(name, websocketURI, listener);
+
+        this.initChannelMessages = messages;
     }
 
     public Logger getLogger() {

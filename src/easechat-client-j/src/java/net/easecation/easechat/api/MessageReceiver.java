@@ -9,7 +9,6 @@ import java.util.logging.Logger;
 * 消息接收器
 * */
 public class MessageReceiver {
-    private Logger logger;
     private Listener listener;
     private EaseChatClient client;
 
@@ -26,7 +25,8 @@ public class MessageReceiver {
 
     public void receive(ReceiveMessage message){
         if (listener != null) listener.listen(message);
-        if (logger != null) client.info(message.toString());
+
+        client.info(message.toString());
     }
 
     /*
