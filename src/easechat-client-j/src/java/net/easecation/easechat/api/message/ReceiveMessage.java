@@ -65,11 +65,11 @@ public class ReceiveMessage implements Message {
                 "|",
                 getMessageType(),
                 String.valueOf(form.getBytes().length),
-                form,
+                getForm(),
                 String.valueOf(channelName.getBytes().length),
-                channelName,
+                getChannelName(),
                 String.valueOf(text.getBytes().length),
-                text
+                getText()
         );
     }
 }

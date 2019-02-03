@@ -25,17 +25,17 @@ public class MessageHandler extends SimpleChannelInboundHandler<ReceiveMessage> 
         super.userEventTriggered(ctx, evt);
 
         if (HANDSHAKE_ISSUED.equals(evt)) {
-            System.out.println("正在向Nexus WebSocket 发送TCP握手");
+            client.info("正在向Nexus WebSocket 发送TCP握手");
         }
 
         if (HANDSHAKE_COMPLETE.equals(evt)) {
-            System.out.println("Nexus WebSocket TCP握手完成 即将发送1h握手");
+            client.info("Nexus WebSocket TCP握手完成 即将发送1h握手");
 
-            client.getSender().sendSyncMessage(new HelloMessage(client.getName()), future -> {
+            client.getSender().sendSyncHelloMessage(new HelloMessage(client.getName()), future -> {
                 if (future.isSuccess()){
-                    System.out.println("1h握手数据 发送成功");
+                    client.info("1h握手数据 发送成功");
                 }else {
-                    System.out.println("握手失败 即将关闭 EaseChatClient");
+                    client.info("握手失败 即将关闭 EaseChatClient");
                     if (!client.shutdown()) System.exit(0); // 暴力关闭 -1s
                 }
             });
@@ -43,9 +43,6 @@ public class MessageHandler extends SimpleChannelInboundHandler<ReceiveMessage> 
     }
 
     protected void channelRead0(ChannelHandlerContext ctx, ReceiveMessage msg) throws Exception {
-
-
-        ctx.channel().writeAndFlush(new TextWebSocketFrame(new TransmitMessage("c/lobby", "xxxxxxxxx").toString()));
+        client.getReceiver().receive(msg);
     }
-
 }

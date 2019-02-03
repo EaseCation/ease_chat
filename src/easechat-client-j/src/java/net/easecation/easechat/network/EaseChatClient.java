@@ -7,15 +7,50 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.*;
 
+import net.easecation.easechat.api.MessageReceiver;
 import net.easecation.easechat.api.MessageSender;
 
 import java.net.URI;
+import java.util.logging.Logger;
 
 public class EaseChatClient {
     private Bootstrap bootstrap;
     private EventLoopGroup loopGroup = new NioEventLoopGroup();
     private Channel channel = null;
     private MessageSender sender;
+    private MessageReceiver receiver;
+    private Logger logger;
+    private URI websocketURI;
+
+    /*
+     * name 用与 向服务端发起1h握手协议时必须带的参数
+     * */
+    public EaseChatClient(String name, URI websocketURI, MessageReceiver.Listener listener){
+        if (name == null || name.isEmpty()) throw new IllegalArgumentException("带个 name 参数啊");
+        this.name = name;
+        if (websocketURI == null){
+            throw new IllegalArgumentException("url不能为空");
+        }
+
+        this.websocketURI = websocketURI;
+        this.receiver = new MessageReceiver(this, listener);
+    }
+
+    public Logger getLogger() {
+        return logger;
+    }
+
+    public void setLogger(Logger logger) {
+        this.logger = logger;
+    }
+
+    public void info(String info){
+        if (logger != null) logger.info(info);
+    }
+
+    public void warning(String warnStr) {
+        if (logger != null) logger.warning(warnStr);
+    }
 
     private String name;
 
@@ -23,20 +58,15 @@ public class EaseChatClient {
         return name;
     }
 
-    /*
-    * name 用与 向服务端发起1h握手协议时必须带的参数
-    * */
-    public EaseChatClient(String name){
-        if (name == null || name.isEmpty()) throw new IllegalArgumentException("带个 name 参数啊");
-        this.name = name;
-    }
-
-    MessageSender getSender() {
+    public MessageSender getSender() {
         return sender;
     }
 
+    MessageReceiver getReceiver(){
+        return receiver;
+    }
+
     public void start() {
-        URI websocketURI = URI.create("wx://localhost:6500");
         bootstrap = new Bootstrap();
         bootstrap
                 .group(loopGroup)
@@ -57,18 +87,12 @@ public class EaseChatClient {
         try {
             this.channel = bootstrap.connect(websocketURI.getHost(), websocketURI.getPort()).sync().channel();
             this.sender = new MessageSender(channel);
+            info("Nexus WebSocket 连接成功");
         } catch (InterruptedException e) {
+            warning("Nexus WebSocket 连接失败");
+            warning(e.getMessage());
             e.printStackTrace();
         }
-
-        new Thread(() -> {
-            try {
-                Thread.sleep(5000);
-                getSender().sendSyncMessage("1c|7|c/lobby|300000|0", future -> System.out.println(future.isSuccess()));
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }).start();
     }
 
     /*

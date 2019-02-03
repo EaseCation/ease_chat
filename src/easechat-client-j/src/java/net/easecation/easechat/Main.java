@@ -6,19 +6,22 @@ import net.easecation.easechat.api.message.ReceiveMessage;
 import net.easecation.easechat.api.message.TransmitMessage;
 import net.easecation.easechat.network.EaseChatClient;
 
+import java.net.URI;
+
 public class Main {
     public static void main(String[] args) {
-        System.out.println("海星");
-        System.out.println("黄德健".getBytes().length);
-        System.out.println("HDJ".getBytes().length);
-        System.out.println(new TransmitMessage("Channel11", "我套你妈的猴子"));
-        for (String s : "1r|9|123456789|7|c/lobby|9|xxxxxxxxx".split("\\|", 7)){
-            System.out.println(s);
-        }
-
-        System.out.println(ReceiveMessage.valueOf("1r|9|123456789|7|c/lobby|9|xxxxxxxxx"));
-        EaseChatClient client = new EaseChatClient("ChinaHDJ");
+        //DEMO
+        EaseChatClient client = new EaseChatClient("ChinaHDJ", URI.create("wx://localhost:6500"), System.out::println);
 
         client.start();
+
+        new Thread(() -> {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            client.getSender().sendSyncChannelMessage(new ChannelMessage("c/lobby", 3000));
+        }).start();
     }
 }
