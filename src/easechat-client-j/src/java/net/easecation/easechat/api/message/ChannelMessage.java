@@ -29,6 +29,10 @@ public class ChannelMessage implements Message {
         this.subscriptionTimeNS = subscriptionTimeNS;
     }
 
+    public int getSubscriptionTime() {
+        return subscriptionTime;
+    }
+
     @Override
     public int getMessageLength() {
         return channelName.getBytes().length;

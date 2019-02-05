@@ -31,7 +31,7 @@ public class MessageSender {
     private void catchHandleAutoSubChannelMessage(Message message) {
         if (message instanceof AutoSubChannelMessage) {
             AutoSubChannelMessage autoSubChannelMessage = (AutoSubChannelMessage) message;
-            timer.schedule(autoSubChannelMessage.getTimerTask(), (autoSubChannelMessage.getSubscriptionTime()));
+            timer.schedule(new AutoSubTimerTask(autoSubChannelMessage), (int) (autoSubChannelMessage.getSubscriptionTime() * 0.9));
         }
     }
 

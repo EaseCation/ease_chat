@@ -3,7 +3,6 @@ package net.easecation.easechat.api.message;
 import net.easecation.easechat.api.MessageSender;
 
 public class AutoSubChannelMessage extends ChannelMessage {
-    private long subscriptionTime;
     private boolean closeAutoSub;
     private MessageSender.AutoSubTimerTask timerTask;
 
@@ -17,11 +16,6 @@ public class AutoSubChannelMessage extends ChannelMessage {
 
     public AutoSubChannelMessage(String channelName, int subscriptionTime, int subscriptionTimeNS) {
         super(channelName, subscriptionTime, subscriptionTimeNS);
-        this.subscriptionTime = subscriptionTime;
-    }
-
-    public long getSubscriptionTime() {
-        return subscriptionTime;
     }
 
     public void setCloseAutoSub(boolean closeAutoSub) {
