@@ -14,11 +14,12 @@ import java.util.TimerTask;
 public class MessageSender {
     private Channel channel;
     private Timer timer;
+
     public Channel getChannel() {
         return channel;
     }
 
-    public MessageSender(Channel channel){
+    public MessageSender(Channel channel) {
         this.channel = channel;
         this.timer = new Timer();
     }
@@ -27,18 +28,17 @@ public class MessageSender {
         timer.cancel();
     }
 
-    private void catchHandleAutoSubChannelMessage(Message message){
-        if (message instanceof AutoSubChannelMessage){
+    private void catchHandleAutoSubChannelMessage(Message message) {
+        if (message instanceof AutoSubChannelMessage) {
             AutoSubChannelMessage autoSubChannelMessage = (AutoSubChannelMessage) message;
-
-            timer.schedule(new AutoSubTimerTask(autoSubChannelMessage), (autoSubChannelMessage.getSubscriptionTime()));
+            timer.schedule(autoSubChannelMessage.getTimerTask(), (autoSubChannelMessage.getSubscriptionTime()));
         }
     }
 
-    /*
-    * 发送消息 同步方式 不使用Result处理返回值
-    * */
-    private boolean sendSyncMessage(Message message){
+    /**
+     * 发送消息 同步方式 不使用Result处理返回值
+     */
+    private boolean sendSyncMessage(Message message) {
         catchHandleAutoSubChannelMessage(message);
 
         try {
@@ -49,17 +49,11 @@ public class MessageSender {
         }
     }
 
-    /*
-    * 发送消息 同步方式 使用Result处理返回值
-    * */
-    private void sendSyncMessage(Message message, Result result){
+    /**
+     * 发送消息 同步方式 使用Result处理返回值
+     */
+    private void sendSyncMessage(Message message, Result result) {
         catchHandleAutoSubChannelMessage(message);
-
-        if (message instanceof AutoSubChannelMessage){
-            AutoSubChannelMessage autoSubChannelMessage = (AutoSubChannelMessage) message;
-
-            timer.schedule(new AutoSubTimerTask(autoSubChannelMessage), (autoSubChannelMessage.getSubscriptionTime()));
-        }
 
         try {
             Future future = getChannel().writeAndFlush(message).sync();
@@ -70,58 +64,57 @@ public class MessageSender {
         }
     }
 
-    /*
+    /**
      * 异步发送
-     * */
+     */
 
-    private void sendAsyncMessage(Message message, Result result){
+    private void sendAsyncMessage(Message message, Result result) {
         catchHandleAutoSubChannelMessage(message);
 
         this.channel.writeAndFlush(message).addListener(result::handle);
     }
 
-    public boolean sendSyncChannelMessage(ChannelMessage message){
+    public boolean sendSyncChannelMessage(ChannelMessage message) {
         return sendSyncMessage(message);
     }
 
-    public void sendSyncChannelMessage(ChannelMessage message, Result result){
+    public void sendSyncChannelMessage(ChannelMessage message, Result result) {
         sendSyncMessage(message, result);
     }
 
-    public boolean sendSyncHelloMessage(HelloMessage message){
+    public boolean sendSyncHelloMessage(HelloMessage message) {
         return sendSyncMessage(message);
     }
 
-    public void sendSyncHelloMessage(HelloMessage message, Result result){
+    public void sendSyncHelloMessage(HelloMessage message, Result result) {
         sendSyncMessage(message, result);
     }
 
-    public boolean sendSyncTransmitMessage(TransmitMessage message){
+    public boolean sendSyncTransmitMessage(TransmitMessage message) {
         return sendSyncMessage(message);
     }
 
-    public void sendSyncTransmitMessage(TransmitMessage message, Result result){
+    public void sendSyncTransmitMessage(TransmitMessage message, Result result) {
         sendSyncMessage(message, result);
     }
 
-    public void sendAsyncHelloMessage(HelloMessage message, Result result){
+    public void sendAsyncHelloMessage(HelloMessage message, Result result) {
         sendAsyncMessage(message, result);
     }
 
-    public void sendAsyncChannelMessage(ChannelMessage message, Result result){
+    public void sendAsyncChannelMessage(ChannelMessage message, Result result) {
         sendAsyncMessage(message, result);
     }
 
-    public void sendAsyncTransmitMessage(TransmitMessage message, Result result){
+    public void sendAsyncTransmitMessage(TransmitMessage message, Result result) {
         sendAsyncMessage(message, result);
     }
 
     public class AutoSubTimerTask extends TimerTask {
 
         private AutoSubChannelMessage message;
-        private boolean isRunning;
 
-        public AutoSubTimerTask(AutoSubChannelMessage message){
+        public AutoSubTimerTask(AutoSubChannelMessage message) {
             this.message = message;
             message.setTimerTask(this);
         }

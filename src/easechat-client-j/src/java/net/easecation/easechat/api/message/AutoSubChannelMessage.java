@@ -2,12 +2,8 @@ package net.easecation.easechat.api.message;
 
 import net.easecation.easechat.api.MessageSender;
 
-import java.util.Timer;
-
 public class AutoSubChannelMessage extends ChannelMessage {
-    private MessageSender sender;
     private long subscriptionTime;
-    private Timer timer;
     private boolean closeAutoSub;
     private MessageSender.AutoSubTimerTask timerTask;
 
@@ -24,16 +20,8 @@ public class AutoSubChannelMessage extends ChannelMessage {
         this.subscriptionTime = subscriptionTime;
     }
 
-    public void setSender(MessageSender sender){
-        if (this.sender == null) this.sender = sender;
-    }
-
     public long getSubscriptionTime() {
         return subscriptionTime;
-    }
-
-    public Timer getTimer() {
-        return timer;
     }
 
     public void setCloseAutoSub(boolean closeAutoSub) {

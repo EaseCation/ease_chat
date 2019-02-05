@@ -2,9 +2,9 @@ package net.easecation.easechat.api.message;
 
 import net.easecation.easechat.api.Message;
 
-/*
-* 订阅消息封装
-* */
+/**
+ * 订阅消息封装
+ */
 public class ChannelMessage implements Message {
 
     private String channelName;

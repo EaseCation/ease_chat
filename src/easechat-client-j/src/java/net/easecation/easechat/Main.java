@@ -27,6 +27,14 @@ public class Main {
                 e.printStackTrace();
             }
             client.getSender().sendSyncChannelMessage(new ChannelMessage("c/lobby", 3000));
+            while(true) {
+                client.getSender().sendSyncTransmitMessage(new TransmitMessage("c/lobby", "" + System.currentTimeMillis()));
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         }).start();
     }
 }
