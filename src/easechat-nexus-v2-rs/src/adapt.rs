@@ -1,14 +1,15 @@
 use super::service;
 use std::collections::VecDeque;
+use std::sync::mpsc;
 
 pub(crate) struct WsFactoryAdapt<F> {
     inner: F,
-    srv: service::Service,
+    sig_tx: mpsc::Sender<service::Signal>,
 }
 
 impl<F> WsFactoryAdapt<F> {
-    fn new(inner: F, srv: service::Service) -> Self {
-        Self { inner, srv }
+    fn new(inner: F, sig_tx: mpsc::Sender<service::Signal>) -> Self {
+        Self { inner, sig_tx }
     }
 } 
 
@@ -20,7 +21,7 @@ where
 
     fn connection_made(&mut self, sender: ws::Sender) -> Self::Handler {
         let inner = self.inner.connection_made(super::Sender { inner: sender.clone() });
-        WsHandlerAdapt { inner, ws_sender: sender, echat_id: None, srv: self.srv.clone() }
+        WsHandlerAdapt { inner, ws_sender: sender, sig_tx: self.sig_tx.clone(), echat_id: None }
     }
     
     fn connection_lost(&mut self, handler: Self::Handler) {
@@ -31,7 +32,7 @@ where
 pub struct WsHandlerAdapt<H> {
     inner: H,
     ws_sender: ws::Sender,
-    srv: service::Service,
+    sig_tx: mpsc::Sender<service::Signal>,
     echat_id: Option<String>
 }
 
@@ -104,8 +105,8 @@ impl<H> WsHandlerAdapt<H> {
     fn handle_v1(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
         match (text.pop_front(), text.pop_front()) {
             (Some('h'), Some('|')) => self.handle_v1_handshake(text),
-            // (Some('c'), Some('|')) => self.handle_v1_listen_channel(text),
-            // (Some('p'), Some('|')) => self.handle_v2_push_message(text),
+            (Some('c'), Some('|')) => self.handle_v1_listen_channel(text),
+            (Some('t'), Some('|')) => self.handle_v2_transmit_message(text),
             _ => self.ws_sender.close_with_reason(ws::CloseCode::Invalid, "Invalid message type"),
         }
     }
@@ -114,22 +115,34 @@ impl<H> WsHandlerAdapt<H> {
     fn handle_v1_handshake(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
         let id = read_string(&mut text);
         self.echat_id = Some(id.clone());
-        self.srv.register_client(id, super::Sender::new(self.ws_sender.clone()));
+        self.sig_tx.send(service::Signal::Register { id: id.clone(), sender: super::Sender::new(self.ws_sender.clone()) }).unwrap();
         Ok(())
     }
 
-    // #[inline]
-    // fn handle_v1_listen_channel(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
-    //     if let Some(src_id) = self.echat_id.clone() {
-    //         let chan_id = read_string(&mut text);
-    //         let valid_until_sec = read_number(&mut text);
-    //         let valid_until_nanos = read_number(&mut text);
-    //         self.msg_tx.send(MsgSignal::Chan { src_id, chan_id, valid_until_sec, valid_until_nanos }).unwrap();
-    //         Ok(())
-    //     } else {
-    //         self.ws_sender.close_with_reason(ws::CloseCode::Status, "Connection unidentified")
-    //     }
-    // }
+    #[inline]
+    fn handle_v1_listen_channel(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
+        if let Some(src_id) = self.echat_id.clone() {
+            let chan_id = read_string(&mut text);
+            let valid_sec = read_number(&mut text);
+            let valid_nanos = read_number(&mut text);
+            self.sig_tx.send(service::Signal::Listen { src_id: src_id.clone(), target_id: chan_id.clone(), valid_sec, valid_nanos }).unwrap();
+            Ok(())
+        } else {
+            self.ws_sender.close_with_reason(ws::CloseCode::Status, "Connection unidentified")
+        }
+    }
+
+    #[inline]
+    fn handle_v2_transmit_message(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
+        if let Some(src_id) = self.echat_id.clone() {
+            let chan_id = read_string(&mut text);
+            let msg = read_string(&mut text);
+            self.sig_tx.send(service::Signal::Push { src_id: src_id.clone(), dest_id: chan_id.clone(), msg: msg.clone() }).unwrap();
+            Ok(())
+        } else {
+            self.ws_sender.close_with_reason(ws::CloseCode::Status, "Connection unidentified")
+        }
+    }
 
 }
 
