@@ -1,25 +1,26 @@
 package net.easecation.easechat.api;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 
 import io.netty.util.concurrent.Future;
 import net.easecation.easechat.api.message.*;
+import net.easecation.easechat.network.EaseChatClient;
 
 import java.util.Timer;
 import java.util.TimerTask;
 
-
 public class MessageSender {
-    private Channel channel;
-    private Timer timer;
+
+    private final EaseChatClient client;
+    private final Channel channel;
+    private final Timer timer;
 
     public Channel getChannel() {
         return channel;
     }
 
-    public MessageSender(Channel channel) {
+    public MessageSender(EaseChatClient client, Channel channel) {
+        this.client = client;
         this.channel = channel;
         this.timer = new Timer();
     }
@@ -31,14 +32,24 @@ public class MessageSender {
     private void catchHandleAutoSubChannelMessage(Message message) {
         if (message instanceof AutoSubChannelMessage) {
             AutoSubChannelMessage autoSubChannelMessage = (AutoSubChannelMessage) message;
-            timer.schedule(new AutoSubTimerTask(autoSubChannelMessage), (int) (autoSubChannelMessage.getSubscriptionTime() * 0.9));
+            timer.schedule(new AutoSubTimerTask(autoSubChannelMessage), autoSubChannelMessage.getSubscriptionTime() * 900);
         }
+    }
+
+    private boolean checkHandshake(Message message) {
+        if (message instanceof HelloMessage) return true;
+        if (!client.isHandshake()) {
+            client.getInitChannelMessages().add(message);
+            return false;
+        }
+        return true;
     }
 
     /**
      * 发送消息 同步方式 不使用Result处理返回值
      */
-    private boolean sendSyncMessage(Message message) {
+    public boolean sendSyncMessage(Message message) {
+        if (!checkHandshake(message)) return true;
         catchHandleAutoSubChannelMessage(message);
 
         try {
@@ -52,7 +63,8 @@ public class MessageSender {
     /**
      * 发送消息 同步方式 使用Result处理返回值
      */
-    private void sendSyncMessage(Message message, Result result) {
+    public void sendSyncMessage(Message message, Result result) {
+        if (!checkHandshake(message)) return;
         catchHandleAutoSubChannelMessage(message);
 
         try {
@@ -67,8 +79,8 @@ public class MessageSender {
     /**
      * 异步发送
      */
-
-    private void sendAsyncMessage(Message message, Result result) {
+    public void sendAsyncMessage(Message message, Result result) {
+        if (!checkHandshake(message)) return;
         catchHandleAutoSubChannelMessage(message);
 
         this.channel.writeAndFlush(message).addListener(result::handle);
@@ -129,6 +141,6 @@ public class MessageSender {
 
     @FunctionalInterface
     public interface Result {
-        void handle(Future future);
+        void handle(Future future) throws InterruptedException;
     }
 }

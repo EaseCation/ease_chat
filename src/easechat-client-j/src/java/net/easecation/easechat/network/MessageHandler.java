@@ -1,11 +1,10 @@
 package net.easecation.easechat.network;
 
 import io.netty.channel.*;
-import io.netty.handler.codec.http.websocketx.*;
+import net.easecation.easechat.api.Message;
 import net.easecation.easechat.api.message.ChannelMessage;
 import net.easecation.easechat.api.message.HelloMessage;
 import net.easecation.easechat.api.message.ReceiveMessage;
-import net.easecation.easechat.api.message.TransmitMessage;
 
 import static io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE;
 import static io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_ISSUED;
@@ -15,7 +14,7 @@ import static io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHand
 * */
 public class MessageHandler extends SimpleChannelInboundHandler<ReceiveMessage> {
 
-    private EaseChatClient client;
+    private final EaseChatClient client;
 
     MessageHandler(EaseChatClient client){
         this.client = client;
@@ -26,22 +25,24 @@ public class MessageHandler extends SimpleChannelInboundHandler<ReceiveMessage> 
         super.userEventTriggered(ctx, evt);
 
         if (HANDSHAKE_ISSUED.equals(evt)) {
-            client.info("正在向Nexus WebSocket 发送TCP握手");
+            client.getLogger().info("正在向 Nexus WebSocket 发送TCP握手");
         }
 
         if (HANDSHAKE_COMPLETE.equals(evt)) {
-            client.info("Nexus WebSocket TCP握手完成 即将发送1h握手");
+            client.getLogger().info("Nexus WebSocket TCP握手完成 即将发送1h握手");
 
             client.getSender().sendSyncHelloMessage(new HelloMessage(client.getName()), future -> {
                 if (future.isSuccess()){
-                    client.info("1h握手数据 发送成功 即将发送初始订阅的频道");
-
-                    for (ChannelMessage message : client.getInitChannelMessage()){
-                        client.getSender().sendSyncChannelMessage(message);
+                    client.setHandshake(true);
+                    client.getLogger().info("1h握手数据 发送成功 开始发送握手成功前未发送的信息包");
+                    for (Message message : client.getInitChannelMessages()){
+                        client.getSender().sendSyncMessage(message);
+                        client.getLogger().info("补充发送：" + message.toString());
                     }
-                }else {
-                    client.info("握手失败 即将关闭 EaseChatClient");
-                    if (!client.shutdown()) System.exit(0); // 暴力关闭 -1s
+                    client.getInitChannelMessages().clear();
+                } else {
+                    client.getLogger().warning("握手失败 即将关闭 EaseChatClient");
+                    if (!client.shutdown()) throw new InterruptedException("haha"); // 暴力关闭 -1s
                 }
             });
         }

@@ -25,8 +25,6 @@ public class MessageReceiver {
 
     public void receive(ReceiveMessage message){
         if (listener != null) listener.listen(message);
-
-        client.info(message.toString());
     }
 
     /*
