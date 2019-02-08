@@ -62,6 +62,12 @@ impl Env {
             map.retain(|inner_ep_id, _instant_sender| &ep_id != inner_ep_id);
         }
     }
+
+    fn size_summary(&self) -> (usize, HashMap<String, usize>) {
+        let ep_len = self.ep.read().unwrap().len();
+        let sub_len = self.chan.read().unwrap().iter().map(|(k, v)| (k.clone(), v.len())).collect();
+        (ep_len, sub_len)
+    }
 }
 
 struct MsgServiceFactory {
@@ -248,7 +254,8 @@ enum MsgSignal {
         ep_id: Option<String>,
         code: ws::CloseCode,
         reason: String,
-    }
+    },
+    Status {} 
 }
 
 fn main() {
@@ -310,6 +317,7 @@ fn main() {
                         eprintln!("error!");
                     };
                 },
+                _ => {} // todo
             };
         }
     });
@@ -333,7 +341,8 @@ fn main() {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
         match input.trim() {
-            "q" => log_tx.send(LogSignal::ShutdownRequest()).unwrap(),
+            "q" | "exit" => log_tx.send(LogSignal::ShutdownRequest()).unwrap(),
+            "l" | "list" => msg_tx.send(MsgSignal::Status{}).unwrap(),
             _ => {}
         }
     }
