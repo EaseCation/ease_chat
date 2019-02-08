@@ -314,13 +314,21 @@ fn main() {
         }
     });
     let addr = "0.0.0.0:6500";
+    let settings = ws::Settings {
+        max_connections: 1024, // 最大连接数，按需增加，千万不要设置到无穷大
+        queue_size: 16, // 每个连接的事件数最大值，按业务量调整
+        ..Default::default()
+    };
+    println!("{:?}", settings);
     let log_tx1 = log_tx.clone();
     let msg_tx1 = msg_tx.clone();
     thread::spawn(move || {
         let fac = MsgServiceFactory::new(log_tx1, msg_tx1);
-        ws::WebSocket::new(fac).unwrap()
+        ws::Builder::new().with_settings(settings)
+            .build(fac).unwrap()
             .listen(addr).unwrap()
     });
+    log_tx.send(LogSignal::ModuleStart(String::from("CMDLINE"))).unwrap();
     loop {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
