@@ -31,6 +31,8 @@ public class MessageHandler extends SimpleChannelInboundHandler<ReceiveMessage> 
         if (HANDSHAKE_COMPLETE.equals(evt)) {
             client.getLogger().info("Nexus WebSocket TCP握手完成 即将发送1h握手");
 
+            while (client.getSender() == null) {}
+
             client.getSender().sendSyncHelloMessage(new HelloMessage(client.getName()), future -> {
                 if (future.isSuccess()){
                     client.setHandshake(true);
@@ -45,6 +47,7 @@ public class MessageHandler extends SimpleChannelInboundHandler<ReceiveMessage> 
                     if (!client.shutdown()) throw new InterruptedException("haha"); // 暴力关闭 -1s
                 }
             });
+
         }
     }
 
