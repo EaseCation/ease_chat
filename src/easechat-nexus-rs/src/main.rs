@@ -134,6 +134,10 @@ impl ws::Handler for MsgServiceHandler {
             self.ws_sender.close_with_reason(ws::CloseCode::Unsupported, "Please input as string text")
         }
     }
+
+    fn on_error(&mut self, err: ws::Error) {
+        self.log_tx.send(LogSignal::Display(String::from("ERRORS"), format!("{:?}", err))).unwrap();
+    }
 }
 
 impl MsgServiceHandler {

@@ -1,5 +1,7 @@
-/target
+**/target
 **/*.rs.bk
 .idea/
 _server/
 **/*.iml
+**/*.class
+**/*.jar
