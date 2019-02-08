@@ -12,6 +12,18 @@ public class Main {
 
     public static void main(String[] args) {
 
+        EaseChatClient c = startClient();
+
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        c.shutdown();
+
+        System.exit(0);
+
         EaseChatClient[] clients = new EaseChatClient[1000];
 
         //压力测试 统计并显示已成功握手的连接数量
@@ -56,7 +68,7 @@ public class Main {
     }
 
     private static EaseChatClient startClient() {
-        EaseChatClient client = new EaseChatClient("ChinaHDJ", URI.create("wx://localhost:6500"), System.out::println);
+        EaseChatClient client = new EaseChatClient("ChinaHDJ", URI.create("wx://192.168.31.122:6500"), System.out::println);
 
         try {
             client.start();

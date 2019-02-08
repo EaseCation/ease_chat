@@ -2,7 +2,6 @@ package net.easecation.easechat.network;
 
 import io.netty.channel.*;
 import net.easecation.easechat.api.Message;
-import net.easecation.easechat.api.message.ChannelMessage;
 import net.easecation.easechat.api.message.HelloMessage;
 import net.easecation.easechat.api.message.ReceiveMessage;
 

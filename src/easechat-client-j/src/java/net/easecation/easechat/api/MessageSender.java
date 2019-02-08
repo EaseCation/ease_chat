@@ -51,7 +51,7 @@ public class MessageSender {
     public boolean sendSyncMessage(Message message) {
         if (!checkHandshake(message)) return true;
         catchHandleAutoSubChannelMessage(message);
-
+        client.getLogger().info(message.toString());
         try {
             return getChannel().writeAndFlush(message).sync().isSuccess();
         } catch (InterruptedException e) {

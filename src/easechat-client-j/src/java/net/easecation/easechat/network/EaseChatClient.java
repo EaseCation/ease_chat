@@ -9,6 +9,7 @@ import io.netty.handler.codec.http.websocketx.*;
 
 import net.easecation.easechat.api.*;
 import net.easecation.easechat.api.message.ChannelMessage;
+import net.easecation.easechat.api.message.DisconnectMessage;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -113,6 +114,7 @@ public class EaseChatClient {
      * 关闭EaseChatClient 同步
      * */
     public boolean shutdown() {
+        this.getSender().sendSyncMessage(new DisconnectMessage("shutdown"));
         return loopGroup.shutdownGracefully().isSuccess();
         /* 下面这个会导致一直堵在这里，无法关闭。
         try {
