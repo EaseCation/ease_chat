@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "ease_chat_nexus"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "ws 0.7.9 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "easechat-recorder"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusqlite 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
