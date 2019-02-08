@@ -63,9 +63,9 @@ impl Env {
         }
     }
 
-    fn size_summary(&self) -> (usize, HashMap<String, usize>) {
+    fn size_summary(&self) -> (usize, usize) {
         let ep_len = self.ep.read().unwrap().len();
-        let sub_len = self.chan.read().unwrap().iter().map(|(k, v)| (k.clone(), v.len())).collect();
+        let sub_len = self.chan.read().unwrap().len();
         (ep_len, sub_len)
     }
 }
@@ -231,7 +231,7 @@ enum LogSignal {
     ConnectionClose(Option<String>, ws::CloseCode, String),
     ChannelAdd(String, String, Instant),
     MessageSent(String, String, usize, String),
-    ShutdownRequest(),
+    Display(String, String),
 }
 
 enum MsgSignal {
@@ -255,7 +255,8 @@ enum MsgSignal {
         code: ws::CloseCode,
         reason: String,
     },
-    Status {} 
+    Status {},
+    ShutdownRequest {},
 }
 
 fn main() {
@@ -266,27 +267,25 @@ fn main() {
         while let Ok(sig) = log_rx.recv() {
             use LogSignal::*;
             match sig {
-                ShutdownRequest() => {
-                    println!("Shutting down...");
-                    std::process::exit(0)
-                },
                 ModuleStart(meta) => 
                     println!("[Module {}] Started!", meta),
                 ConnectionOpen(client_addr) => 
-                    println!("[Client Addr {}] Connection open!", client_addr),
+                    println!("[Addr {}] Connection open!", client_addr),
                 ConnectionIdentified(ep_id) => 
-                    println!("[Client EPID {}] Connection identified!", ep_id),
+                    println!("[EpID {}] Connection identified!", ep_id),
                 ConnectionClose(addr, code, reason) => {
                     if let Some(ep_id) = addr {
-                        println!("[Client EPID {}] Connection closed, Code:[{:?}], Reason:[{}]", ep_id, code, reason)
+                        println!("[EpID {}] Connection closed, Code:[{:?}], Reason:[{}]", ep_id, code, reason)
                     } else { 
-                        println!("[Unidentified Client] Connection closed, Code:[{:?}], Reason:[{}]", code, reason)
+                        println!("[Unidentified] Connection closed, Code:[{:?}], Reason:[{}]", code, reason)
                     }
                 },
                 ChannelAdd(src_ep_id, chan_id, expire) => 
-                    println!("[Client EPID {}] Registered new channel [{}], expire at {:?}", src_ep_id, chan_id, expire),
+                    println!("[EpID {}] Registered new channel [{}], expire at {:?}", src_ep_id, chan_id, expire),
                 MessageSent(src_ep_id, chan_id, ep_cnt, text) => 
-                    println!("[Client EPID {}] Sent to {} [{} other client(s)]: {}", src_ep_id, chan_id, ep_cnt, text),
+                    println!("[EpID {}] Sent to {} [{} client(s) + self]: {}", src_ep_id, chan_id, ep_cnt, text),
+                Display(module, string) => 
+                    println!("[Module {}] {}", module, string),
             }
         }
     });
@@ -317,7 +316,15 @@ fn main() {
                         eprintln!("error!");
                     };
                 },
-                _ => {} // todo
+                Status {} => {
+                    let (ep_len, sub_len) = env.size_summary();
+                    let out = format!("{} clients identified, {} channels active.", ep_len, sub_len);
+                    log_tx1.send(LogSignal::Display("STATUS".to_string(), out)).unwrap();
+                },
+                ShutdownRequest {} => {
+                    println!("Shutting down...");
+                    std::process::exit(0)
+                },
             };
         }
     });
@@ -341,7 +348,7 @@ fn main() {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
         match input.trim() {
-            "q" | "exit" => log_tx.send(LogSignal::ShutdownRequest()).unwrap(),
+            "q" | "exit" => msg_tx.send(MsgSignal::ShutdownRequest{}).unwrap(),
             "l" | "list" => msg_tx.send(MsgSignal::Status{}).unwrap(),
             _ => {}
         }
