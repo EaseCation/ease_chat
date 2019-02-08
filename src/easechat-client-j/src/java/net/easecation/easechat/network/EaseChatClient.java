@@ -115,14 +115,13 @@ public class EaseChatClient {
      * */
     public boolean shutdown() {
         this.getSender().sendSyncMessage(new DisconnectMessage("shutdown"));
-        return loopGroup.shutdownGracefully().isSuccess();
-        /* 下面这个会导致一直堵在这里，无法关闭。
         try {
-            return channel.closeFuture().sync().isSuccess();
+            channel.closeFuture().sync().isSuccess();
         } catch (InterruptedException e) {
             e.printStackTrace();
             return false;
-        }*/
+        }
+        return loopGroup.shutdownGracefully().isSuccess();
     }
 
     public boolean isActive() {

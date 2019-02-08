@@ -11,7 +11,7 @@ public class ChannelMessage implements Message {
     private int subscriptionTime;
     private int subscriptionTimeNS;
 
-    public final static int DEFAULT_SUBSCRIPTION_TIME = 300; //默认订阅时间 五分钟
+    public final static int DEFAULT_SUBSCRIPTION_TIME = 600; //默认订阅时间 十分钟
 
     public final static int DEFAULT_SUBSCRIPTION_TIME_NS = 0; //默认订阅时间（纳秒）0
 

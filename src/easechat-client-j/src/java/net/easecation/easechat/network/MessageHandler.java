@@ -46,11 +46,11 @@ public class MessageHandler extends SimpleChannelInboundHandler<ReceiveMessage> 
                     if (!client.shutdown()) throw new InterruptedException("haha"); // 暴力关闭 -1s
                 }
             });
-
         }
     }
 
     protected void channelRead0(ChannelHandlerContext ctx, ReceiveMessage msg) throws Exception {
         client.getReceiver().receive(msg);
     }
+
 }
