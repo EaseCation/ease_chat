@@ -1,7 +1,12 @@
 [package]
-name = "easechat-recorder-rs"
+name = "easechat-recorder"
 version = "0.1.0"
 authors = ["luojia65 <me@luojia.cc>"]
 edition = "2018"
 
 [dependencies]
+chrono = "0.4"
+
+[dependencies.rusqlite]
+version = "0.16"
+features = ["chrono"]
