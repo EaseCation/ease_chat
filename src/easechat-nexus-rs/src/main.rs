@@ -63,6 +63,17 @@ impl Env {
         }
     }
 
+    pub fn broadcast_and_shutdown(&mut self, code: ws::CloseCode, reason: String) -> ws::Result<()> {
+        let mut ep = self.ep.write().unwrap();
+        let mut chan = self.chan.write().unwrap();
+        for sender in ep.values() {
+            sender.close_with_reason(code, reason.clone())?;
+        }
+        ep.clear();
+        chan.clear();
+        Ok(())
+    }
+
     fn size_summary(&self) -> (usize, usize) {
         let ep_len = self.ep.read().unwrap().len();
         let sub_len = self.chan.read().unwrap().len();
@@ -132,6 +143,7 @@ impl MsgServiceHandler {
     // 1h|16|eafc5479a7e9f012
     // 1t|7|c/lobby|10|helloworld
     // 1c|7|c/lobby|1548507103|2140083600
+    // 1d|11|just logout
     #[inline]
     fn handle_message_signal(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
         match text.pop_front() {
@@ -146,7 +158,8 @@ impl MsgServiceHandler {
             (Some('h'), Some('|')) => self.handle_v1_handshake(text),
             (Some('t'), Some('|')) => self.handle_v1_text(text),
             (Some('c'), Some('|')) => self.handle_v1_chan(text),
-            _ => self.ws_sender.close_with_reason(ws::CloseCode::Invalid, "Invalid message type: expected 'h', 't' or 'c'"),
+            (Some('d'), Some('|')) => self.handle_v1_disconnect(text),
+            _ => self.ws_sender.close_with_reason(ws::CloseCode::Invalid, "Invalid message type: expected 'h', 't', 'c' or 'd'"),
         }
     }
 
@@ -220,6 +233,14 @@ impl MsgServiceHandler {
             self.ws_sender.close_with_reason(ws::CloseCode::Status, "Connection unidentified")
         }
     }
+
+    // 11|just logout
+    #[inline]
+    fn handle_v1_disconnect(&mut self, mut text: VecDeque<char>) -> ws::Result<()> {
+        let code = ws::CloseCode::Normal;
+        let reason = Self::read_string(&mut text);
+        self.ws_sender.close_with_reason(code, reason)
+    }
 }
 
 
@@ -256,7 +277,9 @@ enum MsgSignal {
         reason: String,
     },
     Status {},
-    ShutdownRequest {},
+    ShutdownRequest {
+        reason: String,
+    },
 }
 
 fn main() {
@@ -321,8 +344,9 @@ fn main() {
                     let out = format!("{} clients identified, {} channels active.", ep_len, sub_len);
                     log_tx1.send(LogSignal::Display("STATUS".to_string(), out)).unwrap();
                 },
-                ShutdownRequest {} => {
+                ShutdownRequest { reason } => {
                     println!("Shutting down...");
+                    env.broadcast_and_shutdown(ws::CloseCode::Normal, reason).unwrap();
                     std::process::exit(0)
                 },
             };
@@ -348,7 +372,10 @@ fn main() {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
         match input.trim() {
-            "q" | "exit" => msg_tx.send(MsgSignal::ShutdownRequest{}).unwrap(),
+            "q" | "exit" => {
+                let reason = String::from("server shutdown"); // todo
+                msg_tx.send(MsgSignal::ShutdownRequest{ reason }).unwrap()
+            },
             "l" | "list" => msg_tx.send(MsgSignal::Status{}).unwrap(),
             _ => {}
         }
