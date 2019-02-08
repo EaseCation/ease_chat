@@ -46,6 +46,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "easechat-recorder-rs"
+version = "0.1.0"
+
+[[package]]
 name = "fuchsia-cprng"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
