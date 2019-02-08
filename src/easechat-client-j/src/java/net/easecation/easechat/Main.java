@@ -30,15 +30,6 @@ public class Main {
             }
         }).start();
 
-        //压力测试 创建大批量连接
-        for (int i = 0; i < clients.length; i++) {
-            try {
-                clients[i] = startClient();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
         //压力测试 定时发送消息
         new Thread(() -> {
             while(true) {
@@ -52,6 +43,15 @@ public class Main {
                 }
             }
         }).start();
+
+        //压力测试 创建大批量连接
+        for (int i = 0; i < clients.length; i++) {
+            try {
+                clients[i] = startClient();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
 
     }
 
