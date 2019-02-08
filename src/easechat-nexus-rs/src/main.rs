@@ -315,7 +315,7 @@ fn main() {
     });
     let addr = "0.0.0.0:6500";
     let settings = ws::Settings {
-        max_connections: 1024, // 最大连接数，按需增加，千万不要设置到无穷大
+        max_connections: 4096, // 最大连接数，按需增加，千万不要设置到无穷大
         queue_size: 16, // 每个连接的事件数最大值，按业务量调整
         ..Default::default()
     };
