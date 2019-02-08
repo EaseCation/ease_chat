@@ -56,7 +56,7 @@ public class Main {
     }
 
     private static EaseChatClient startClient() {
-        EaseChatClient client = new EaseChatClient("ChinaHDJ", URI.create("wx://ntest.easecation.net:6500"), System.out::println);
+        EaseChatClient client = new EaseChatClient("ChinaHDJ", URI.create("wx://localhost:6500"), System.out::println);
 
         try {
             client.start();
