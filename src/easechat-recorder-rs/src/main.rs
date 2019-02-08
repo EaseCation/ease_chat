@@ -32,7 +32,7 @@ fn main() {
     conn.execute(
         "INSERT INTO person (name, time_created, data)
                   VALUES (?1, ?2, ?3)",
-        &[&me.name as &ToSql, &me.time_created, &me.data],
+        &[&me.name as &dyn ToSql, &me.time_created, &me.data],
     )
     .unwrap();
 
