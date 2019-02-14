@@ -362,7 +362,7 @@ fn main() {
             };
         }
     });
-    let addr = "0.0.0.0:6500";
+    let addr = std::env::args().nth(1).unwrap_or("0.0.0.0:6500".to_string());
     let settings = ws::Settings {
         max_connections: 4096, // 最大连接数，按需增加，千万不要设置到无穷大
         queue_size: 16, // 每个连接的事件数最大值，按业务量调整
@@ -372,7 +372,8 @@ fn main() {
     let log_tx1 = log_tx.clone();
     let msg_tx1 = msg_tx.clone();
     thread::spawn(move || {
-        let fac = MsgServiceFactory::new(log_tx1, msg_tx1);
+        let fac = MsgServiceFactory::new(log_tx1.clone(), msg_tx1);
+        log_tx1.send(LogSignal::Display(String::from("SOCKET"), format!("Listening on {}", addr))).unwrap();
         ws::Builder::new().with_settings(settings)
             .build(fac).unwrap()
             .listen(addr).unwrap()
