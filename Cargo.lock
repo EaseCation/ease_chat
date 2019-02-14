@@ -117,7 +117,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "easechat-recorder"
+name = "easechat-record"
 version = "0.0.0"
 dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -10,9 +10,9 @@ fn main() {
         (version: "0.0.0")
         (author: "Luo Jia <me@luojia.cc>")
         (about: "Connect to easechat server and record messages on some channels")
-        (@arg CONFIG: -c --config +takes_value "Sets a custom config file")
-        (@arg IP: +required "Sets the ip address of server")
-        (@arg PORT: -p "Sets the port of server, default to 6500")
+        (@arg HOSTNAME: +required "Sets the host ip address of server")
+        (@arg PORT: -p --port +takes_value "Sets the port of server, default to 6500")
+        (@arg SQLITE_PATH: --save-sqlite +takes_value "Sets a SQLite file path for storage")
     ).get_matches();
     let conn = Connection::open_in_memory().unwrap();
     conn.execute(
