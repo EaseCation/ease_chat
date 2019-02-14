@@ -2,8 +2,9 @@
 
 ### 基本：
 
- - 本协议暂时基于WebSocket
+ - 本协议暂时基于WebSocket，属于内网协议
  - 直接通过传递字符串进行信息交换，在字符串中使用`|`分割信息体
+ - 未来将使用可靠性可选的、基于UDP的虚拟连接协议，并加强安全性，以便开放到公网
 
 ### 协议种类：
 
@@ -14,6 +15,7 @@ Client发送给Nexus的有以下类型：
  - `1h` Hello 握手
  - `1c` Channel 订阅频道
  - `1t` Transmit 发送消息
+ - `1d` Disconnect 断开连接
 
 Nexus主动发送给Client的有以下类型：
 
@@ -48,6 +50,13 @@ _客户端发送给服务端_
 
 例如：
 发送helloworld到c/lobby频道 `1t|7|c/lobby|10|helloworld`
+
+### `1d` Disconnect 断开连接：
+
+组合方式：1d|理由`长度(字节)`|理由
+
+例如：`1d|11|just logout`
+
 
 ### `1r` Receive 接收消息：
 
