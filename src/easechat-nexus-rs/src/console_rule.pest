@@ -3,6 +3,8 @@ nonspace_char = _{ !space_char ~ ANY }
 space = _{ ( space_char ) * }
 nonspace_string = _{ ( nonspace_char ) + }
 remaining_string = _{ ( ANY ) + }
+end_of_command = _{ ("\r" | "\n") * ~ EOI }
+// space rule is buggy, check "pushabc" and "push abc"
 
 cmd_quit_head = { "quit" | "exit" | "q" }
 cmd_quit = _{ cmd_quit_head }
@@ -14,4 +16,4 @@ chan_id = { nonspace_string }
 msg = { remaining_string }
 cmd_push = _{ cmd_push_head ~ space ~ sender_id ~ space ~ chan_id ~ space ~ msg }
 
-command = _{ SOI ~ space ~ (cmd_quit | cmd_list | cmd_push) ~ space ~ EOI }
+command = _{ SOI ~ space ~ (cmd_quit | cmd_list | cmd_push) ~ space ~ end_of_command }
