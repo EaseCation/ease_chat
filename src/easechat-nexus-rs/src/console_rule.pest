@@ -17,4 +17,7 @@ chan_id = { nonspace_string }
 msg = { remaining_string }
 cmd_push = _{ cmd_push_head ~ space ~ sender_id ~ space ~ chan_id ~ space ~ msg }
 
-command = _{ SOI ~ space ~ (cmd_stop | cmd_list | cmd_push) ~ space ~ end_of_command }
+cmd_huaji_head = { "huaji" }
+cmd_huaji = _{ cmd_huaji_head }
+
+command = _{ SOI ~ space ~ (cmd_stop | cmd_list | cmd_push | cmd_huaji) ~ space ~ end_of_command }

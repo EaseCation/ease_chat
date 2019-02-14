@@ -395,6 +395,9 @@ fn main() {
                     let text = msg.as_str().to_string();
                     msg_tx.send(MsgSignal::Text { src_ep_id, chan_id, text }).unwrap();
                 },
+                Some(Rule::cmd_huaji_head) => {
+                    log_tx.send(LogSignal::Display("CMDLINE".to_string(), "huaji".to_string())).unwrap();
+                },
                 _ => eprintln!("unreachable expression, this is a bug!")
             },
             Err(e) => {
