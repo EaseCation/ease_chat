@@ -1,11 +1,15 @@
-mod console;
-
 use std::{
     collections::{HashMap, VecDeque},
     sync::{mpsc, Arc, RwLock},
     thread,
     time::{Instant, Duration},
 };
+use pest_derive::Parser;
+use pest::Parser;
+
+#[derive(Parser)]
+#[grammar = "console_rule.pest"]
+struct NexusParser;
 
 #[derive(Clone)]
 struct Env {
@@ -312,7 +316,7 @@ fn main() {
                 ChannelAdd(src_ep_id, chan_id, expire) => 
                     println!("[EpID {}] Registered new channel [{}], expire at {:?}", src_ep_id, chan_id, expire),
                 MessageSent(src_ep_id, chan_id, ep_cnt, text) => 
-                    println!("[EpID {}] Sent to {} [{} client(s) + self]: {}", src_ep_id, chan_id, ep_cnt, text),
+                    println!("[EpID {}] Sent to {} [{} client(s) excluding self]: {}", src_ep_id, chan_id, ep_cnt, text),
                 Display(module, string) => 
                     println!("[Module {}] {}", module, string),
             }
@@ -351,7 +355,7 @@ fn main() {
                     log_tx1.send(LogSignal::Display("STATUS".to_string(), out)).unwrap();
                 },
                 ShutdownRequest { reason } => {
-                    println!("Shutting down...");
+                    println!("Shutting down with reason [{}]...", reason);
                     env.broadcast_and_shutdown(ws::CloseCode::Normal, reason).unwrap();
                     std::process::exit(0)
                 },
@@ -375,15 +379,27 @@ fn main() {
     });
     log_tx.send(LogSignal::ModuleStart(String::from("CMDLINE"))).unwrap();
     loop {
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input).unwrap();
-        match input.trim() {
-            "q" | "exit" => {
-                let reason = String::from("server shutdown"); // todo
-                msg_tx.send(MsgSignal::ShutdownRequest{ reason }).unwrap()
+        let mut buf = String::new();
+        std::io::stdin().read_line(&mut buf).unwrap();
+        match NexusParser::parse(Rule::command, &buf.trim()) {
+            Ok(mut pairs) => match pairs.next().map(|p| p.as_rule()) {
+                Some(Rule::cmd_stop_head) => {
+                    let reason = pairs.next().map(|p| p.as_str()).unwrap_or("server shutdown").to_string();
+                    msg_tx.send(MsgSignal::ShutdownRequest{ reason }).unwrap()
+                }, 
+                Some(Rule::cmd_list_head) => msg_tx.send(MsgSignal::Status{}).unwrap(),
+                Some(Rule::cmd_push_head) => if let (Some(sender), Some(chan), Some(msg)) 
+                    = (pairs.next(), pairs.next(), pairs.next()) {
+                    let src_ep_id = sender.as_str().to_string();
+                    let chan_id = chan.as_str().to_string();
+                    let text = msg.as_str().to_string();
+                    msg_tx.send(MsgSignal::Text { src_ep_id, chan_id, text }).unwrap();
+                },
+                _ => eprintln!("unreachable expression, this is a bug!")
             },
-            "l" | "list" => msg_tx.send(MsgSignal::Status{}).unwrap(),
-            _ => {}
+            Err(e) => {
+                eprintln!("err: <Console Input> {}", e);
+            }
         }
     }
 }

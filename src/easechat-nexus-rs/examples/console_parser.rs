@@ -11,7 +11,7 @@ fn main() {
         std::io::stdin().read_line(&mut buf).unwrap();
         match NexusParser::parse(Rule::command, &buf.trim()) {
             Ok(mut pairs) => match pairs.next().map(|p| p.as_rule()) {
-                Some(Rule::cmd_quit_head) => std::process::exit(0),
+                Some(Rule::cmd_stop_head) => std::process::exit(0),
                 Some(Rule::cmd_list_head) => println!("list!!"),
                 Some(Rule::cmd_push_head) => if let (Some(sender), Some(chan), Some(msg)) 
                     = (pairs.next(), pairs.next(), pairs.next()) {

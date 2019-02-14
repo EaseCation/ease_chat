@@ -6,14 +6,15 @@ remaining_string = _{ ( ANY ) + }
 end_of_command = _{ ("\r" | "\n") * ~ EOI }
 // space rule is buggy, check "pushabc" and "push abc"
 
-cmd_quit_head = { "quit" | "exit" | "q" }
-cmd_quit = _{ cmd_quit_head }
+cmd_stop_head = { "quit" | "exit" | "stop" | "q" }
+stop_reason = { remaining_string } 
+cmd_stop = _{ cmd_stop_head ~ ( space ~ stop_reason )? }
 cmd_list_head = { "list" | "l" }
 cmd_list = _{ cmd_list_head } 
-cmd_push_head = { "push" | "msg" | "say" | "p" }
+cmd_push_head = { "push" | "msg" | "say" | "send" | "p" }
 sender_id = { nonspace_string }
 chan_id = { nonspace_string }
 msg = { remaining_string }
 cmd_push = _{ cmd_push_head ~ space ~ sender_id ~ space ~ chan_id ~ space ~ msg }
 
-command = _{ SOI ~ space ~ (cmd_quit | cmd_list | cmd_push) ~ space ~ end_of_command }
+command = _{ SOI ~ space ~ (cmd_stop | cmd_list | cmd_push) ~ space ~ end_of_command }
