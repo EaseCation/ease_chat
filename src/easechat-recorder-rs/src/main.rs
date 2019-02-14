@@ -1,5 +1,0 @@
-mod console;
-
-fn main() { 
-    
-}
