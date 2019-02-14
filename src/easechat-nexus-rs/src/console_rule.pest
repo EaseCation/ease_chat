@@ -16,7 +16,6 @@ sender_id = { nonspace_string }
 chan_id = { nonspace_string }
 msg = { remaining_string }
 cmd_push = _{ cmd_push_head ~ space ~ sender_id ~ space ~ chan_id ~ space ~ msg }
-
 cmd_huaji_head = { "huaji" }
 cmd_huaji = _{ cmd_huaji_head }
 
