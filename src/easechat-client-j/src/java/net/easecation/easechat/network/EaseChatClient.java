@@ -114,12 +114,14 @@ public class EaseChatClient {
      * 关闭EaseChatClient 同步
      * */
     public boolean shutdown() {
-        this.getSender().sendSyncMessage(new DisconnectMessage("shutdown"));
-        try {
-            channel.closeFuture().sync().isSuccess();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            return false;
+        if (this.getSender() != null) {
+            this.getSender().sendSyncMessage(new DisconnectMessage("shutdown"));
+            try {
+                channel.closeFuture().sync().isSuccess();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                return false;
+            }
         }
         return loopGroup.shutdownGracefully().isSuccess();
     }
