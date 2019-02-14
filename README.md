@@ -1,6 +1,7 @@
 # EaseChat
 
-Simple message exchange network with channel-subscription based structure.
+Simple message exchange network with channel-subscription based structure. 
+EaseChat is designed as a chat server for games.
 
 ## Project structure
 
