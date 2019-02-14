@@ -3,6 +3,10 @@ name = "ease_chat_nexus"
 version = "0.0.2"
 authors = ["luojia65 <me@luojia.cc>"]
 edition = "2018"
+build = "build.rs"
 
 [dependencies]
 ws = "*"
+
+[build-dependencies]
+peg = { version = "0.5" }

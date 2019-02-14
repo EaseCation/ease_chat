@@ -1,3 +1,5 @@
+mod console;
+
 use std::{
     collections::{HashMap, VecDeque},
     sync::{mpsc, Arc, RwLock},
