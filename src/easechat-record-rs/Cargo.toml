@@ -1,5 +1,5 @@
 [package]
-name = "easechat-recorder"
+name = "easechat-record"
 version = "0.0.0"
 authors = ["luojia65 <me@luojia.cc>"]
 edition = "2018"
@@ -7,5 +7,5 @@ edition = "2018"
 [dependencies]
 chrono = "0.4"
 ws = "*"
-clap = { version = "2.32", features = ["yaml"] }
+clap = "2"
 rusqlite = { version = "0.16", features = ["chrono"] }
