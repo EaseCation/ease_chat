@@ -84,22 +84,21 @@ impl Env {
     }
 
     fn summary_by_keyword(&self, kw: &str) -> 
-        (Vec<(String, Duration)>, Vec<(String, Duration)>) 
+        (Vec<(String, Instant)>, Vec<(String, Instant)>) 
         // (by sender_id) chan_id => expire | (by chan_id) sender_id => expire
     {
-        let now = Instant::now();
         let map = self.chan.read().unwrap();
         let mut ans_sender = Vec::new();
         if let Some(ep_ins_map) = map.get(kw) {
             for (ep_id, (expire_at, _sender)) in ep_ins_map {
-                ans_sender.push((ep_id.clone(), *expire_at - now))
+                ans_sender.push((ep_id.clone(), *expire_at))
             }
         }
         let mut ans_chan = Vec::new();
         for (chan_id, ep_ins_map) in map.iter() {
             for (ep_id, (expire_at, _sender)) in ep_ins_map {
                 if ep_id == kw {
-                    ans_chan.push((chan_id.clone(), *expire_at - now))
+                    ans_chan.push((chan_id.clone(), *expire_at))
                 }
             }
         }
@@ -375,19 +374,24 @@ fn main() {
                     if let Some(keyword) = keyword {
                         let (ans_sender, ans_chan) = env.summary_by_keyword(&keyword);
                         let mut out = String::new();
+                        let now = Instant::now();
+                        fn process_expire(expire: Instant, now: Instant) -> String {
+                            if expire > now { format!("expire at {:?}", expire - now) }
+                            else { "already expired".to_string() }
+                        }
                         if ans_chan.len() == 0 && ans_sender.len() == 0 {
                             out += &format!("No status found for keyword [{}].", keyword);
                         }
                         if ans_chan.len() > 0 {
                             out += &format!("EpID [{}] listens {} channel(s):", keyword, ans_chan.len());
                             for (chan_id, expire) in ans_chan {
-                                out += &format!("\n\tchannel: [{}], expire {:?}", chan_id, expire);
+                                out += &format!("\n\tchannel: [{}], {}", chan_id, process_expire(expire, now));
                             }
                         }
                         if ans_sender.len() > 0 {
                             out += &format!("Channel [{}] is subscribed by {} client(s):", keyword, ans_sender.len());
                             for (sender_id, expire) in ans_sender {
-                                out += &format!("\n\tsender: [{}], expire: {:?}", sender_id, expire);
+                                out += &format!("\n\tsender: [{}], {}", sender_id, process_expire(expire, now));
                             }
                         }
                         log_tx1.send(LogSignal::Display("STATUS".to_string(), out)).unwrap();
