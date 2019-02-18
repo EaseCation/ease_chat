@@ -52,11 +52,13 @@ impl Env {
                         sender.send(format!("1r|{}|{}|{}|{}|{}|{}", src_ep_id.len(), src_ep_id, chan_id.len(), chan_id, text.len(), text))?;
                         cnt += 1;
                     }
-                } else {
-                    if let Some(mp) = self.chan.write().unwrap().get_mut(&chan_id) {
-                        mp.remove(ep_id);
-                    }
-                }
+                } 
+                // fixme: 这里锁一起导致有bug，待修
+                // else {
+                //     if let Some(mp) = self.chan.write().unwrap().get_mut(&chan_id) {
+                //         mp.remove(ep_id);
+                //     }
+                // }
             }
         }
         Ok(cnt)
