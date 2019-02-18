@@ -53,12 +53,7 @@ impl Env {
                         cnt += 1;
                     }
                 } 
-                // fixme: 这里锁一起导致有bug，待修
-                // else {
-                //     if let Some(mp) = self.chan.write().unwrap().get_mut(&chan_id) {
-                //         mp.remove(ep_id);
-                //     }
-                // }
+                // 这里不能填write，会死锁
             }
         }
         Ok(cnt)
@@ -86,6 +81,29 @@ impl Env {
         let ep_len = self.ep.read().unwrap().len();
         let sub_len = self.chan.read().unwrap().len();
         (ep_len, sub_len)
+    }
+
+    fn summary_by_keyword(&self, kw: &str) -> 
+        (Vec<(String, Duration)>, Vec<(String, Duration)>) 
+        // (by sender_id) chan_id => expire | (by chan_id) sender_id => expire
+    {
+        let now = Instant::now();
+        let map = self.chan.read().unwrap();
+        let mut ans_sender = Vec::new();
+        if let Some(ep_ins_map) = map.get(kw) {
+            for (ep_id, (expire_at, _sender)) in ep_ins_map {
+                ans_sender.push((ep_id.clone(), *expire_at - now))
+            }
+        }
+        let mut ans_chan = Vec::new();
+        for (chan_id, ep_ins_map) in map.iter() {
+            for (ep_id, (expire_at, _sender)) in ep_ins_map {
+                if ep_id == kw {
+                    ans_chan.push((chan_id.clone(), *expire_at - now))
+                }
+            }
+        }
+        (ans_sender, ans_chan)
     }
 }
 
@@ -288,7 +306,9 @@ enum MsgSignal {
         code: ws::CloseCode,
         reason: String,
     },
-    Status {},
+    Status {
+        keyword: Option<String>,
+    },
     ShutdownRequest {
         reason: String,
     },
@@ -351,10 +371,31 @@ fn main() {
                         eprintln!("error!");
                     };
                 },
-                Status {} => {
-                    let (ep_len, sub_len) = env.size_summary();
-                    let out = format!("{} clients identified, {} channels active.", ep_len, sub_len);
-                    log_tx1.send(LogSignal::Display("STATUS".to_string(), out)).unwrap();
+                Status { keyword } => {
+                    if let Some(keyword) = keyword {
+                        let (ans_sender, ans_chan) = env.summary_by_keyword(&keyword);
+                        let mut out = String::new();
+                        if ans_chan.len() == 0 && ans_sender.len() == 0 {
+                            out += &format!("No status found for keyword [{}].", keyword);
+                        }
+                        if ans_chan.len() > 0 {
+                            out += &format!("EpID [{}] listens {} channel(s):", keyword, ans_chan.len());
+                            for (chan_id, expire) in ans_chan {
+                                out += &format!("\n\tchannel: [{}], expire {:?}", chan_id, expire);
+                            }
+                        }
+                        if ans_sender.len() > 0 {
+                            out += &format!("Channel [{}] is subscribed by {} client(s):", keyword, ans_sender.len());
+                            for (sender_id, expire) in ans_sender {
+                                out += &format!("\n\tsender: [{}], expire: {:?}", sender_id, expire);
+                            }
+                        }
+                        log_tx1.send(LogSignal::Display("STATUS".to_string(), out)).unwrap();
+                    } else {
+                        let (ep_len, sub_len) = env.size_summary();
+                        let out = format!("{} clients identified, {} channels active.", ep_len, sub_len);
+                        log_tx1.send(LogSignal::Display("STATUS".to_string(), out)).unwrap();
+                    }
                 },
                 ShutdownRequest { reason } => {
                     println!("Shutting down with reason [{}]...", reason);
@@ -390,7 +431,11 @@ fn main() {
                     let reason = pairs.next().map(|p| p.as_str()).unwrap_or("server shutdown").to_string();
                     msg_tx.send(MsgSignal::ShutdownRequest{ reason }).unwrap()
                 }, 
-                Some(Rule::cmd_list_head) => msg_tx.send(MsgSignal::Status{}).unwrap(),
+                Some(Rule::cmd_list_head) => if let Some(keyword) = pairs.next() {
+                    let mut keyword = Some(keyword.as_str().to_string());
+                    if Some("".to_string()) == keyword { keyword = None }
+                    msg_tx.send(MsgSignal::Status { keyword }).unwrap()
+                },
                 Some(Rule::cmd_push_head) => if let (Some(sender), Some(chan), Some(msg)) 
                     = (pairs.next(), pairs.next(), pairs.next()) {
                     let src_ep_id = sender.as_str().to_string();
@@ -401,6 +446,7 @@ fn main() {
                 Some(Rule::cmd_huaji_head) => {
                     log_tx.send(LogSignal::Display("CMDLINE".to_string(), "huaji".to_string())).unwrap();
                 },
+                Some(Rule::EOI) => {},
                 _ => eprintln!("unreachable expression, this is a bug!")
             },
             Err(e) => {

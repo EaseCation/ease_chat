@@ -10,7 +10,8 @@ cmd_stop_head = { "quit" | "exit" | "stop" | "q" }
 stop_reason = { remaining_string } 
 cmd_stop = _{ cmd_stop_head ~ ( space ~ stop_reason )? }
 cmd_list_head = { "list" | "l" }
-cmd_list = _{ cmd_list_head } 
+list_keyword = { nonspace_string }
+cmd_list = _{ cmd_list_head ~ ( space ~ list_keyword )? } 
 cmd_push_head = { "push" | "msg" | "say" | "send" | "p" }
 sender_id = { nonspace_string }
 chan_id = { nonspace_string }
@@ -19,4 +20,4 @@ cmd_push = _{ cmd_push_head ~ space ~ sender_id ~ space ~ chan_id ~ space ~ msg 
 cmd_huaji_head = { "huaji" }
 cmd_huaji = _{ cmd_huaji_head }
 
-command = _{ SOI ~ space ~ (cmd_stop | cmd_list | cmd_push | cmd_huaji) ~ space ~ end_of_command }
+command = _{ SOI ~ space ~ (cmd_stop | cmd_list | cmd_push | cmd_huaji) ? ~ space ~ end_of_command }
