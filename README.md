@@ -1,7 +1,12 @@
 # EaseChat
 
 Simple message exchange network with channel-subscription based structure. 
-EaseChat is designed as a chat server for games.
+EaseChat was originally designed as a chat message exchanging service for games, but its usage could be widen to debug messages
+and commands for maintaining.
+
+Although the first version of EaseChat Nexus may be outdated, but we deployed it on production use months ago. 
+It continues to exchange massive messages for our game server for 3,000 hours without rebooting and pausing, its CPU and RAM usage
+being low at the same time. Players mostly suggest it 'Great' in our recent survey on this part of the game's experience.
 
 ## Project structure
 
