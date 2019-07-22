@@ -5,7 +5,7 @@ EaseChat was originally designed as a chat message exchanging service for games,
 and commands for maintaining.
 
 Although the first version of EaseChat Nexus may be less flexible, we deployed it on production use months ago. 
-Its record on non-pausing and reboot-free execution is 3,432 hours on our mini-game server network region, since 30 Jan to 22 Jun 2019, killed mistaken by a ctrl-c quit. The network consists of ~350 endpoints and produces ~1k messages on average per second, their CPU and RAM usage being low at the same time. 
+Its record on non-pausing and reboot-free continous execution is 3,432 hours on our mini-game server network region, since 30 Jan to 22 Jun 2019, killed mistaken by a ctrl-c quit. The network consists of ~350 endpoints and produces ~1k messages on average per second, their CPU and RAM usage being low at the same time. 
 Players mostly suggest it 'Great' in our recent survey on this part of the game's experience.
 
 ## Project structure
