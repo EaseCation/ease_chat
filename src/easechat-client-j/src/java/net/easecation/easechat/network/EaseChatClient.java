@@ -87,6 +87,7 @@ public class EaseChatClient {
                 .group(loopGroup)
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(1024 * 1024))
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 2000)
                 .handler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
                     protected void initChannel(NioSocketChannel channel) {
