@@ -6,6 +6,6 @@ edition = "2018"
 
 [dependencies]
 chrono = "0.4"
-ws = "*"
+ws = "0.7.9"
 clap = "2"
 rusqlite = { version = "0.16", features = ["chrono"] }

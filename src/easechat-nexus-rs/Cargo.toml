@@ -5,6 +5,6 @@ authors = ["luojia65 <me@luojia.cc>"]
 edition = "2018"
 
 [dependencies]
-ws = "*"
+ws = "0.7.9"
 pest = "*"
 pest_derive = "*"
