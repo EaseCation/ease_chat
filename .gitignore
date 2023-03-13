@@ -5,3 +5,4 @@ _server/
 **/*.iml
 **/*.class
 **/*.jar
+tstart.sh
