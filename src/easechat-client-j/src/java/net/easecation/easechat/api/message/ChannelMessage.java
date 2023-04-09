@@ -7,9 +7,9 @@ import net.easecation.easechat.api.Message;
  */
 public class ChannelMessage implements Message {
 
-    private String channelName;
-    private int subscriptionTime;
-    private int subscriptionTimeNS;
+    private final String channelName;
+    private final int subscriptionTime;
+    private final int subscriptionTimeNS;
 
     public final static int DEFAULT_SUBSCRIPTION_TIME = 600; //默认订阅时间 十分钟
 

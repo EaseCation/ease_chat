@@ -7,8 +7,8 @@ import net.easecation.easechat.api.Message;
 * */
 public class TransmitMessage implements Message {
 
-    private String channelName;
-    private String text;
+    private final String channelName;
+    private final String text;
 
     public TransmitMessage(String channelName, String text){
         if (channelName == null || channelName.isEmpty()){

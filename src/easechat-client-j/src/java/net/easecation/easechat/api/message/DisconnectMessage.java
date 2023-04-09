@@ -6,7 +6,7 @@ import net.easecation.easechat.api.Message;
 * 断开连接 封装
 * */
 public class DisconnectMessage implements Message {
-    private String text;
+    private final String text;
 
     public DisconnectMessage(String text){
         this.text = text;

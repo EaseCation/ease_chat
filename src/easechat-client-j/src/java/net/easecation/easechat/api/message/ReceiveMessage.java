@@ -6,9 +6,9 @@ import net.easecation.easechat.api.Message;
 * 消息接收数据 封装
 * */
 public class ReceiveMessage implements Message {
-    private String text;
-    private String channelName;
-    private String form;
+    private final String text;
+    private final String channelName;
+    private final String form;
 
     public static ReceiveMessage valueOf(String source){
         String[] data = source.split("\\|",7);
@@ -16,15 +16,15 @@ public class ReceiveMessage implements Message {
         if (!data[0].equals(MESSAGE_RECEIVE)){
             throw new IllegalArgumentException("协议头有误");
         }
-        if (data[2].getBytes().length != Integer.valueOf(data[1])){
+        if (data[2].getBytes().length != Integer.parseInt(data[1])){
             throw new IllegalArgumentException("协议头有误");
         }
 
-        if (data[4].getBytes().length != Integer.valueOf(data[3])){
+        if (data[4].getBytes().length != Integer.parseInt(data[3])){
             throw new IllegalArgumentException("协议头有误");
         }
 
-        if (data[6].getBytes().length != Integer.valueOf(data[5])){
+        if (data[6].getBytes().length != Integer.parseInt(data[5])){
             throw new IllegalArgumentException("协议头有误");
         }
 

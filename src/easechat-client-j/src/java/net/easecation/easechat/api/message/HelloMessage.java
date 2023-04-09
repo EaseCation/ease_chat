@@ -6,7 +6,7 @@ import net.easecation.easechat.api.Message;
 * 握手消息 封装
 * */
 public class HelloMessage implements Message {
-    private String text;
+    private final String text;
 
     public HelloMessage(String text){
         this.text = text;

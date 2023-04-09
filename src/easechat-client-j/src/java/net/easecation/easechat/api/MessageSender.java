@@ -2,6 +2,7 @@ package net.easecation.easechat.api;
 
 import io.netty.channel.Channel;
 
+import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
 import net.easecation.easechat.api.message.*;
 import net.easecation.easechat.network.EaseChatClient;
@@ -67,7 +68,7 @@ public class MessageSender {
         catchHandleAutoSubChannelMessage(message);
 
         try {
-            Future future = getChannel().writeAndFlush(message).sync();
+            ChannelFuture future = getChannel().writeAndFlush(message).sync();
 
             if (result != null) result.handle(future);
         } catch (InterruptedException e) {
@@ -123,7 +124,7 @@ public class MessageSender {
 
     public class AutoSubTimerTask extends TimerTask {
 
-        private AutoSubChannelMessage message;
+        private final AutoSubChannelMessage message;
 
         public AutoSubTimerTask(AutoSubChannelMessage message) {
             this.message = message;

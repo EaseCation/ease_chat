@@ -10,7 +10,7 @@ import java.util.logging.Logger;
 * */
 public class MessageReceiver {
     private Listener listener;
-    private EaseChatClient client;
+    private final EaseChatClient client;
 
     public MessageReceiver(EaseChatClient client, Listener listener){
         this.client = client;

@@ -3,6 +3,7 @@ package net.easecation.easechat.network;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.*;
@@ -15,18 +16,18 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class EaseChatClient {
 
-    private Bootstrap bootstrap;
-    private EventLoopGroup loopGroup = new NioEventLoopGroup();
+    private EventLoopGroup loopGroup;
     private Channel channel = null;
     private boolean isHandshake = false;
     private MessageSender sender;
-    private MessageReceiver receiver;
+    private final MessageReceiver receiver;
     private Logger logger = new SimpleLogger();
-    private URI websocketURI;
-    private List<Message> initChannelMessages = new ArrayList<>();
+    private final URI websocketURI;
+    private final List<Message> initChannelMessages = new ArrayList<>();
 
     /*
      * name 用与 向服务端发起1h握手协议时必须带的参数
@@ -55,7 +56,7 @@ public class EaseChatClient {
         this.logger = logger;
     }
 
-    private String name;
+    private final String name;
 
     String getName() {
         return name;
@@ -82,15 +83,25 @@ public class EaseChatClient {
     }
 
     public void start() throws Exception {
-        bootstrap = new Bootstrap();
+        start(null);
+    }
+
+    public void start(Consumer<Bootstrap> setup) throws Exception {
+        Bootstrap bootstrap = new Bootstrap();
+        if (setup != null) {
+            setup.accept(bootstrap);
+        }
+        if (bootstrap.config().group() == null) {
+            loopGroup = new NioEventLoopGroup();
+            bootstrap.group(loopGroup)
+                    .channel(NioSocketChannel.class);
+        }
         bootstrap
-                .group(loopGroup)
-                .channel(NioSocketChannel.class)
                 .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(1024 * 1024))
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 2000)
-                .handler(new ChannelInitializer<NioSocketChannel>() {
+                .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
-                    protected void initChannel(NioSocketChannel channel) {
+                    protected void initChannel(SocketChannel channel) {
                         channel.pipeline()
                                 .addLast(new HttpClientCodec())
                                 .addLast(new HttpObjectAggregator(65535))
@@ -123,6 +134,10 @@ public class EaseChatClient {
                 e.printStackTrace();
                 return false;
             }
+        }
+
+        if (loopGroup == null) {
+            return true;
         }
         return loopGroup.shutdownGracefully().isSuccess();
     }
