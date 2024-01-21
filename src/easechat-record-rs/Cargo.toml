@@ -8,4 +8,4 @@ edition = "2018"
 chrono = "0.4"
 ws = "0.7.9"
 clap = "2"
-rusqlite = { version = "0.16", features = ["chrono"] }
+rusqlite = { version = "0.23", features = ["chrono"] }
