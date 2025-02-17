@@ -3,8 +3,6 @@ package net.easecation.easechat.api;
 import net.easecation.easechat.api.message.ReceiveMessage;
 import net.easecation.easechat.network.EaseChatClient;
 
-import java.util.logging.Logger;
-
 /*
 * 消息接收器
 * */

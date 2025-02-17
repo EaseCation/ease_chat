@@ -6,3 +6,4 @@ _server/
 **/*.class
 **/*.jar
 tstart.sh
+build

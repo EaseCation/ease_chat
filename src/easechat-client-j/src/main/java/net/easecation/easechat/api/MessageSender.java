@@ -1,10 +1,13 @@
 package net.easecation.easechat.api;
 
+import net.easecation.easechat.api.message.AutoSubChannelMessage;
+import net.easecation.easechat.api.message.ChannelMessage;
+import net.easecation.easechat.api.message.HelloMessage;
+import net.easecation.easechat.api.message.TransmitMessage;
 import io.netty.channel.Channel;
 
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
-import net.easecation.easechat.api.message.*;
 import net.easecation.easechat.network.EaseChatClient;
 
 import java.util.Timer;
