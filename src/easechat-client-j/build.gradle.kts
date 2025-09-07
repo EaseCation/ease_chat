@@ -8,7 +8,7 @@ application {
 }
 
 dependencies {
-    api(libs.netty.all)
+    api(libs.netty.http)
 }
 
 description = "easechat-client-j"
