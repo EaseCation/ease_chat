@@ -1,7 +1,10 @@
 [workspace]
 members = [
-    "src/easechat-nexus-rs",
+    "src/easechat-nexus-rs"
+]
+exclude = [
     "src/easechat-nexus-v2-rs",
     "src/easechat-exec-rs",
     "src/easechat-record-rs"
 ]
+resolver = "2"
