@@ -126,20 +126,29 @@ public class EaseChatClient {
      * 关闭EaseChatClient 同步
      * */
     public boolean shutdown() {
-        if (this.getSender() != null) {
-            this.getSender().sendSyncMessage(new DisconnectMessage("shutdown"));
-            try {
-                channel.closeFuture().sync().isSuccess();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-                return false;
+        close("shutdown");
+        return true;
+    }
+
+    public void close(String reason) {
+        if (this.sender != null) {
+            this.sender.stopTimer();
+            if (this.channel != null && this.channel.isActive()) {
+                try {
+                    this.sender.sendAsyncMessage(new DisconnectMessage(reason), future -> {});
+                } catch (RuntimeException e) {
+                    getLogger().debug("Failed to send disconnect message: " + e.getMessage());
+                }
             }
         }
 
-        if (loopGroup == null) {
-            return true;
+        if (this.channel != null) {
+            this.channel.close();
         }
-        return loopGroup.shutdownGracefully().isSuccess();
+
+        if (this.loopGroup != null) {
+            this.loopGroup.shutdownGracefully();
+        }
     }
 
     public boolean isActive() {

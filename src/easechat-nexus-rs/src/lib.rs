@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::env;
 use std::net::SocketAddr;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -12,9 +13,13 @@ use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Message as WsMessage}
 use tracing::{debug, info, warn};
 
 pub const DEFAULT_ADDR: &str = "0.0.0.0:6500";
-pub const OUTBOUND_QUEUE_SIZE: usize = 16;
+pub const OUTBOUND_QUEUE_SIZE: usize = 1024;
+pub const DEFAULT_OUTBOUND_SEND_TIMEOUT_MS: u64 = 20;
+pub const DEFAULT_HEARTBEAT_INTERVAL_SECONDS: u64 = 30;
+pub const DEFAULT_HEARTBEAT_CHANNEL: &str = "__easechat/heartbeat";
 const SERVICE_CHANNEL_SIZE: usize = 4096;
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
+const OVERFLOW_WARNING_INTERVAL: Duration = Duration::from_secs(5);
 
 pub type ServiceSender = mpsc::Sender<ServiceEvent>;
 pub type OutboundSender = mpsc::Sender<OutboundMessage>;
@@ -70,12 +75,102 @@ pub enum OutboundMessage {
     Close { kind: CloseKind, reason: String },
 }
 
+#[derive(Debug, Clone)]
+pub struct ServiceConfig {
+    pub outbound_queue_size: usize,
+    pub outbound_send_timeout: Duration,
+    pub heartbeat_interval: Duration,
+    pub heartbeat_channel: String,
+}
+
+impl Default for ServiceConfig {
+    fn default() -> Self {
+        Self {
+            outbound_queue_size: OUTBOUND_QUEUE_SIZE,
+            outbound_send_timeout: Duration::from_millis(DEFAULT_OUTBOUND_SEND_TIMEOUT_MS),
+            heartbeat_interval: Duration::from_secs(DEFAULT_HEARTBEAT_INTERVAL_SECONDS),
+            heartbeat_channel: DEFAULT_HEARTBEAT_CHANNEL.to_string(),
+        }
+    }
+}
+
+impl ServiceConfig {
+    pub fn from_env() -> Self {
+        let defaults = Self::default();
+        Self {
+            outbound_queue_size: parse_env_usize(
+                "EASECHAT_OUTBOUND_QUEUE_SIZE",
+                defaults.outbound_queue_size,
+            ),
+            outbound_send_timeout: Duration::from_millis(parse_env_u64(
+                "EASECHAT_OUTBOUND_SEND_TIMEOUT_MS",
+                defaults.outbound_send_timeout.as_millis() as u64,
+            )),
+            heartbeat_interval: Duration::from_secs(parse_env_u64(
+                "EASECHAT_SERVER_HEARTBEAT_INTERVAL_SECONDS",
+                defaults.heartbeat_interval.as_secs(),
+            )),
+            heartbeat_channel: env::var("EASECHAT_SERVER_HEARTBEAT_CHANNEL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(defaults.heartbeat_channel),
+        }
+    }
+}
+
+fn parse_env_u64(name: &str, default_value: u64) -> u64 {
+    match env::var(name) {
+        Ok(value) => match value.parse::<u64>() {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                warn!(
+                    "Invalid {} value [{}], using default {}: {}",
+                    name, value, default_value, error
+                );
+                default_value
+            }
+        },
+        Err(_) => default_value,
+    }
+}
+
+fn parse_env_usize(name: &str, default_value: usize) -> usize {
+    match env::var(name) {
+        Ok(value) => match value.parse::<usize>() {
+            Ok(parsed) if parsed > 0 => parsed,
+            Ok(_) => {
+                warn!(
+                    "Invalid {} value [{}], using default {}: value must be positive",
+                    name, value, default_value
+                );
+                default_value
+            }
+            Err(error) => {
+                warn!(
+                    "Invalid {} value [{}], using default {}: {}",
+                    name, value, default_value, error
+                );
+                default_value
+            }
+        },
+        Err(_) => default_value,
+    }
+}
+
+fn current_epoch_millis() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+}
+
 #[derive(Debug)]
 pub enum ServiceEvent {
     Connected {
         connection_id: u64,
         peer: Option<SocketAddr>,
         sender: OutboundSender,
+        control_sender: OutboundSender,
     },
     Inbound {
         connection_id: u64,
@@ -106,12 +201,14 @@ struct ConnectionState {
     ep_id: Option<String>,
     peer: Option<SocketAddr>,
     sender: OutboundSender,
+    control_sender: OutboundSender,
 }
 
 #[derive(Debug, Clone)]
 struct EndpointState {
     connection_id: u64,
     sender: OutboundSender,
+    control_sender: OutboundSender,
 }
 
 #[derive(Debug, Clone)]
@@ -122,14 +219,26 @@ struct SubscriptionState {
 
 #[derive(Debug, Default)]
 pub struct ServiceState {
+    config: ServiceConfig,
     connections: HashMap<u64, ConnectionState>,
     endpoints: HashMap<String, EndpointState>,
     subscriptions: HashMap<String, HashMap<String, SubscriptionState>>,
+    overflow_warning_at: HashMap<String, Instant>,
 }
 
 impl ServiceState {
     pub fn new() -> Self {
-        Self::default()
+        Self::with_config(ServiceConfig::from_env())
+    }
+
+    pub fn with_config(config: ServiceConfig) -> Self {
+        Self {
+            config,
+            connections: HashMap::new(),
+            endpoints: HashMap::new(),
+            subscriptions: HashMap::new(),
+            overflow_warning_at: HashMap::new(),
+        }
     }
 
     pub fn endpoint_count(&self) -> usize {
@@ -140,12 +249,13 @@ impl ServiceState {
         self.subscriptions.len()
     }
 
-    pub fn handle_event(&mut self, event: ServiceEvent) -> bool {
+    pub async fn handle_event(&mut self, event: ServiceEvent) -> bool {
         match event {
             ServiceEvent::Connected {
                 connection_id,
                 peer,
                 sender,
+                control_sender,
             } => {
                 self.connections.insert(
                     connection_id,
@@ -153,6 +263,7 @@ impl ServiceState {
                         ep_id: None,
                         peer,
                         sender,
+                        control_sender,
                     },
                 );
                 if let Some(peer) = peer {
@@ -165,7 +276,7 @@ impl ServiceState {
             ServiceEvent::Inbound {
                 connection_id,
                 message,
-            } => self.handle_inbound(connection_id, message),
+            } => self.handle_inbound(connection_id, message).await,
             ServiceEvent::Disconnected {
                 connection_id,
                 reason,
@@ -173,7 +284,7 @@ impl ServiceState {
                 self.unregister_connection(connection_id, reason);
                 true
             }
-            ServiceEvent::Console(command) => self.handle_console(command),
+            ServiceEvent::Console(command) => self.handle_console(command).await,
             ServiceEvent::CleanupExpired => {
                 self.cleanup_expired();
                 true
@@ -181,7 +292,7 @@ impl ServiceState {
         }
     }
 
-    fn handle_inbound(&mut self, connection_id: u64, message: ClientMessage) -> bool {
+    async fn handle_inbound(&mut self, connection_id: u64, message: ClientMessage) -> bool {
         match message {
             ClientMessage::Hello { ep_id } => {
                 self.register_endpoint(connection_id, ep_id);
@@ -225,7 +336,7 @@ impl ServiceState {
             }
             ClientMessage::Transmit { channel, text } => {
                 if let Some(ep_id) = self.current_ep_id(connection_id) {
-                    let sent = self.push_message(&ep_id, &channel, &text);
+                    let sent = self.push_message(&ep_id, &channel, &text).await;
                     debug!(
                         "[EpID {}] Sent to {} [{} client(s) excluding self]: {}",
                         ep_id, channel, sent, text
@@ -247,7 +358,7 @@ impl ServiceState {
         }
     }
 
-    fn handle_console(&mut self, command: ConsoleCommand) -> bool {
+    async fn handle_console(&mut self, command: ConsoleCommand) -> bool {
         match command {
             ConsoleCommand::Status { keyword } => {
                 self.print_status(keyword);
@@ -258,7 +369,7 @@ impl ServiceState {
                 channel,
                 text,
             } => {
-                let sent = self.push_message(&source, &channel, &text);
+                let sent = self.push_message(&source, &channel, &text).await;
                 info!(
                     "[EpID {}] Sent to {} [{} client(s) excluding self]: {}",
                     source, channel, sent, text
@@ -284,11 +395,12 @@ impl ServiceState {
     }
 
     fn register_endpoint(&mut self, connection_id: u64, ep_id: String) {
-        let sender = if let Some(connection) = self.connections.get(&connection_id) {
-            connection.sender.clone()
-        } else {
-            return;
-        };
+        let (sender, control_sender) =
+            if let Some(connection) = self.connections.get(&connection_id) {
+                (connection.sender.clone(), connection.control_sender.clone())
+            } else {
+                return;
+            };
 
         if let Some(old_ep_id) = self
             .connections
@@ -305,7 +417,7 @@ impl ServiceState {
                 if let Some(connection) = self.connections.get_mut(&previous.connection_id) {
                     connection.ep_id = None;
                 }
-                let _ = previous.sender.try_send(OutboundMessage::Close {
+                let _ = previous.control_sender.try_send(OutboundMessage::Close {
                     kind: CloseKind::Error,
                     reason: "Duplicate endpoint identity".to_string(),
                 });
@@ -320,6 +432,7 @@ impl ServiceState {
             EndpointState {
                 connection_id,
                 sender,
+                control_sender,
             },
         );
         info!("[EpID {}] Connection identified!", ep_id);
@@ -366,7 +479,7 @@ impl ServiceState {
             })
     }
 
-    fn push_message(&mut self, source: &str, channel: &str, text: &str) -> usize {
+    async fn push_message(&mut self, source: &str, channel: &str, text: &str) -> usize {
         let now = Instant::now();
         let payload = encode_receive_message(source, channel, text);
         let mut targets = Vec::new();
@@ -404,14 +517,25 @@ impl ServiceState {
 
         let mut sent = 0;
         let mut failed = Vec::new();
+        let mut timed_out = Vec::new();
         for (ep_id, sender) in targets {
-            match sender.try_send(OutboundMessage::Text(payload.clone())) {
-                Ok(()) => sent += 1,
-                Err(error) => {
+            match time::timeout(
+                self.config.outbound_send_timeout,
+                sender.send(OutboundMessage::Text(payload.clone())),
+            )
+            .await
+            {
+                Ok(Ok(())) => sent += 1,
+                Ok(Err(error)) => {
                     warn!("Failed to enqueue message for [{}]: {}", ep_id, error);
                     failed.push(ep_id);
                 }
+                Err(_) => timed_out.push(ep_id),
             }
+        }
+
+        for ep_id in timed_out {
+            self.warn_enqueue_timeout(&ep_id, channel);
         }
 
         for ep_id in stale_endpoints.into_iter().chain(failed) {
@@ -426,9 +550,34 @@ impl ServiceState {
         sent
     }
 
+    async fn send_heartbeat(&mut self) {
+        if self.config.heartbeat_interval.is_zero() || self.config.heartbeat_channel.is_empty() {
+            return;
+        }
+        let channel = self.config.heartbeat_channel.clone();
+        let payload = current_epoch_millis().to_string();
+        self.push_message("nexus", &channel, &payload).await;
+    }
+
+    fn warn_enqueue_timeout(&mut self, ep_id: &str, channel: &str) {
+        let now = Instant::now();
+        let should_warn = match self.overflow_warning_at.get(ep_id) {
+            Some(last_warning) => now.duration_since(*last_warning) >= OVERFLOW_WARNING_INTERVAL,
+            None => true,
+        };
+        if !should_warn {
+            return;
+        }
+        self.overflow_warning_at.insert(ep_id.to_string(), now);
+        warn!(
+            "Outbound queue for [{}] stayed full while sending channel [{}] for {:?}; dropping this message for that endpoint",
+            ep_id, channel, self.config.outbound_send_timeout
+        );
+    }
+
     fn close_connection(&mut self, connection_id: u64, kind: CloseKind, reason: String) {
         if let Some(connection) = self.connections.get(&connection_id) {
-            let _ = connection.sender.try_send(OutboundMessage::Close {
+            let _ = connection.control_sender.try_send(OutboundMessage::Close {
                 kind,
                 reason: reason.clone(),
             });
@@ -528,17 +677,26 @@ pub async fn run_service(
     info!("[Module MSG-SERV] Started!");
     let mut state = ServiceState::new();
     let mut cleanup = time::interval(CLEANUP_INTERVAL);
+    let heartbeat_duration = if state.config.heartbeat_interval.is_zero() {
+        Duration::from_secs(3600)
+    } else {
+        state.config.heartbeat_interval
+    };
+    let mut heartbeat = time::interval(heartbeat_duration);
 
     loop {
         tokio::select! {
             Some(event) = receiver.recv() => {
-                if !state.handle_event(event) {
+                if !state.handle_event(event).await {
                     let _ = shutdown_tx.send(true);
                     break;
                 }
             }
             _ = cleanup.tick() => {
-                state.handle_event(ServiceEvent::CleanupExpired);
+                state.handle_event(ServiceEvent::CleanupExpired).await;
+            }
+            _ = heartbeat.tick(), if !state.config.heartbeat_interval.is_zero() => {
+                state.send_heartbeat().await;
             }
             else => break,
         }
@@ -590,13 +748,16 @@ pub async fn handle_connection(
         }
     };
     let (mut writer, mut reader) = ws_stream.split();
-    let (out_tx, mut out_rx) = mpsc::channel(OUTBOUND_QUEUE_SIZE);
+    let queue_size = ServiceConfig::from_env().outbound_queue_size;
+    let (out_tx, mut out_rx) = mpsc::channel(queue_size);
+    let (control_tx, mut control_rx) = mpsc::channel(8);
 
     if event_tx
         .send(ServiceEvent::Connected {
             connection_id,
             peer,
             sender: out_tx.clone(),
+            control_sender: control_tx.clone(),
         })
         .await
         .is_err()
@@ -605,7 +766,13 @@ pub async fn handle_connection(
     }
 
     let writer_task = tokio::spawn(async move {
-        while let Some(message) = out_rx.recv().await {
+        loop {
+            let message = tokio::select! {
+                biased;
+                Some(message) = control_rx.recv() => message,
+                Some(message) = out_rx.recv() => message,
+                else => break,
+            };
             let result = match message {
                 OutboundMessage::Text(text) => writer.send(WsMessage::Text(text.into())).await,
                 OutboundMessage::Pong(data) => writer.send(WsMessage::Pong(data.into())).await,
@@ -647,7 +814,7 @@ pub async fn handle_connection(
                     }
                 }
                 Err(error) => {
-                    let _ = out_tx.try_send(OutboundMessage::Close {
+                    let _ = control_tx.try_send(OutboundMessage::Close {
                         kind: error.kind,
                         reason: error.reason.to_string(),
                     });
@@ -657,7 +824,7 @@ pub async fn handle_connection(
             },
             Ok(WsMessage::Binary(_)) => {
                 let reason = "Please input as string text";
-                let _ = out_tx.try_send(OutboundMessage::Close {
+                let _ = control_tx.try_send(OutboundMessage::Close {
                     kind: CloseKind::Unsupported,
                     reason: reason.to_string(),
                 });
@@ -665,7 +832,7 @@ pub async fn handle_connection(
                 break;
             }
             Ok(WsMessage::Ping(data)) => {
-                let _ = out_tx.try_send(OutboundMessage::Pong(data.to_vec()));
+                let _ = control_tx.try_send(OutboundMessage::Pong(data.to_vec()));
             }
             Ok(WsMessage::Pong(_)) => {}
             Ok(WsMessage::Close(frame)) => {
@@ -948,61 +1115,83 @@ mod tests {
     #[tokio::test]
     async fn service_routes_messages_and_excludes_sender() {
         let (sender_a, mut receiver_a) = mpsc::channel(OUTBOUND_QUEUE_SIZE);
+        let (control_sender_a, _control_receiver_a) = mpsc::channel(8);
         let (sender_b, mut receiver_b) = mpsc::channel(OUTBOUND_QUEUE_SIZE);
+        let (control_sender_b, _control_receiver_b) = mpsc::channel(8);
         let (sender_c, mut receiver_c) = mpsc::channel(OUTBOUND_QUEUE_SIZE);
+        let (control_sender_c, _control_receiver_c) = mpsc::channel(8);
         let mut state = ServiceState::new();
 
-        state.handle_event(ServiceEvent::Connected {
-            connection_id: 1,
-            peer: None,
-            sender: sender_a,
-        });
-        state.handle_event(ServiceEvent::Connected {
-            connection_id: 2,
-            peer: None,
-            sender: sender_b,
-        });
-        state.handle_event(ServiceEvent::Connected {
-            connection_id: 3,
-            peer: None,
-            sender: sender_c,
-        });
-        state.handle_event(ServiceEvent::Inbound {
-            connection_id: 1,
-            message: ClientMessage::Hello {
-                ep_id: "a".to_string(),
-            },
-        });
-        state.handle_event(ServiceEvent::Inbound {
-            connection_id: 2,
-            message: ClientMessage::Hello {
-                ep_id: "b".to_string(),
-            },
-        });
-        state.handle_event(ServiceEvent::Inbound {
-            connection_id: 3,
-            message: ClientMessage::Hello {
-                ep_id: "c".to_string(),
-            },
-        });
-        for connection_id in [1, 2, 3] {
-            state.handle_event(ServiceEvent::Inbound {
-                connection_id,
-                message: ClientMessage::Subscribe {
-                    channel: "room".to_string(),
-                    valid_secs: 60,
-                    valid_nanos: 0,
+        state
+            .handle_event(ServiceEvent::Connected {
+                connection_id: 1,
+                peer: None,
+                sender: sender_a,
+                control_sender: control_sender_a,
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Connected {
+                connection_id: 2,
+                peer: None,
+                sender: sender_b,
+                control_sender: control_sender_b,
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Connected {
+                connection_id: 3,
+                peer: None,
+                sender: sender_c,
+                control_sender: control_sender_c,
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 1,
+                message: ClientMessage::Hello {
+                    ep_id: "a".to_string(),
                 },
-            });
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 2,
+                message: ClientMessage::Hello {
+                    ep_id: "b".to_string(),
+                },
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 3,
+                message: ClientMessage::Hello {
+                    ep_id: "c".to_string(),
+                },
+            })
+            .await;
+        for connection_id in [1, 2, 3] {
+            state
+                .handle_event(ServiceEvent::Inbound {
+                    connection_id,
+                    message: ClientMessage::Subscribe {
+                        channel: "room".to_string(),
+                        valid_secs: 60,
+                        valid_nanos: 0,
+                    },
+                })
+                .await;
         }
 
-        state.handle_event(ServiceEvent::Inbound {
-            connection_id: 1,
-            message: ClientMessage::Transmit {
-                channel: "room".to_string(),
-                text: "hello".to_string(),
-            },
-        });
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 1,
+                message: ClientMessage::Transmit {
+                    channel: "room".to_string(),
+                    text: "hello".to_string(),
+                },
+            })
+            .await;
 
         assert!(receiver_a.try_recv().is_err());
         assert_eq!(
@@ -1017,53 +1206,195 @@ mod tests {
 
     #[tokio::test]
     async fn service_cleans_expired_and_replaces_duplicate_endpoint() {
-        let (sender_a1, mut receiver_a1) = mpsc::channel(OUTBOUND_QUEUE_SIZE);
+        let (sender_a1, _receiver_a1) = mpsc::channel(OUTBOUND_QUEUE_SIZE);
+        let (control_sender_a1, mut control_receiver_a1) = mpsc::channel(8);
         let (sender_a2, _receiver_a2) = mpsc::channel(OUTBOUND_QUEUE_SIZE);
+        let (control_sender_a2, _control_receiver_a2) = mpsc::channel(8);
         let mut state = ServiceState::new();
 
-        state.handle_event(ServiceEvent::Connected {
-            connection_id: 1,
-            peer: None,
-            sender: sender_a1,
-        });
-        state.handle_event(ServiceEvent::Inbound {
-            connection_id: 1,
-            message: ClientMessage::Hello {
-                ep_id: "a".to_string(),
-            },
-        });
-        state.handle_event(ServiceEvent::Inbound {
-            connection_id: 1,
-            message: ClientMessage::Subscribe {
-                channel: "room".to_string(),
-                valid_secs: 0,
-                valid_nanos: 1,
-            },
-        });
+        state
+            .handle_event(ServiceEvent::Connected {
+                connection_id: 1,
+                peer: None,
+                sender: sender_a1,
+                control_sender: control_sender_a1,
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 1,
+                message: ClientMessage::Hello {
+                    ep_id: "a".to_string(),
+                },
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 1,
+                message: ClientMessage::Subscribe {
+                    channel: "room".to_string(),
+                    valid_secs: 0,
+                    valid_nanos: 1,
+                },
+            })
+            .await;
 
         time::sleep(Duration::from_millis(2)).await;
-        state.handle_event(ServiceEvent::CleanupExpired);
+        state.handle_event(ServiceEvent::CleanupExpired).await;
         assert_eq!(state.channel_count(), 0);
 
-        state.handle_event(ServiceEvent::Connected {
-            connection_id: 2,
-            peer: None,
-            sender: sender_a2,
-        });
-        state.handle_event(ServiceEvent::Inbound {
-            connection_id: 2,
-            message: ClientMessage::Hello {
-                ep_id: "a".to_string(),
-            },
-        });
+        state
+            .handle_event(ServiceEvent::Connected {
+                connection_id: 2,
+                peer: None,
+                sender: sender_a2,
+                control_sender: control_sender_a2,
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 2,
+                message: ClientMessage::Hello {
+                    ep_id: "a".to_string(),
+                },
+            })
+            .await;
         assert_eq!(state.endpoint_count(), 1);
         assert_eq!(
-            receiver_a1.try_recv().unwrap(),
+            control_receiver_a1.try_recv().unwrap(),
             OutboundMessage::Close {
                 kind: CloseKind::Error,
                 reason: "Duplicate endpoint identity".to_string()
             }
         );
+    }
+
+    #[tokio::test]
+    async fn service_drops_overflow_message_without_unregistering_endpoint() {
+        let (sender_a, _receiver_a) = mpsc::channel(1);
+        let (control_sender_a, _control_receiver_a) = mpsc::channel(8);
+        let (sender_b, mut receiver_b) = mpsc::channel(1);
+        let (control_sender_b, _control_receiver_b) = mpsc::channel(8);
+        let mut state = ServiceState::with_config(ServiceConfig {
+            outbound_queue_size: 1,
+            outbound_send_timeout: Duration::from_millis(5),
+            heartbeat_interval: Duration::from_secs(30),
+            heartbeat_channel: DEFAULT_HEARTBEAT_CHANNEL.to_string(),
+        });
+
+        state
+            .handle_event(ServiceEvent::Connected {
+                connection_id: 1,
+                peer: None,
+                sender: sender_a,
+                control_sender: control_sender_a,
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Connected {
+                connection_id: 2,
+                peer: None,
+                sender: sender_b,
+                control_sender: control_sender_b,
+            })
+            .await;
+        for (connection_id, ep_id) in [(1, "a"), (2, "b")] {
+            state
+                .handle_event(ServiceEvent::Inbound {
+                    connection_id,
+                    message: ClientMessage::Hello {
+                        ep_id: ep_id.to_string(),
+                    },
+                })
+                .await;
+        }
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 2,
+                message: ClientMessage::Subscribe {
+                    channel: "room".to_string(),
+                    valid_secs: 60,
+                    valid_nanos: 0,
+                },
+            })
+            .await;
+
+        for text in ["first", "dropped"] {
+            state
+                .handle_event(ServiceEvent::Inbound {
+                    connection_id: 1,
+                    message: ClientMessage::Transmit {
+                        channel: "room".to_string(),
+                        text: text.to_string(),
+                    },
+                })
+                .await;
+        }
+
+        assert_eq!(state.endpoint_count(), 2);
+        assert_eq!(
+            receiver_b.try_recv().unwrap(),
+            OutboundMessage::Text("1r|1|a|4|room|5|first".to_string())
+        );
+
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 1,
+                message: ClientMessage::Transmit {
+                    channel: "room".to_string(),
+                    text: "third".to_string(),
+                },
+            })
+            .await;
+        assert_eq!(
+            receiver_b.try_recv().unwrap(),
+            OutboundMessage::Text("1r|1|a|4|room|5|third".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn service_sends_heartbeat_to_subscribers() {
+        let (sender_a, mut receiver_a) = mpsc::channel(OUTBOUND_QUEUE_SIZE);
+        let (control_sender_a, _control_receiver_a) = mpsc::channel(8);
+        let mut state = ServiceState::with_config(ServiceConfig {
+            outbound_queue_size: OUTBOUND_QUEUE_SIZE,
+            outbound_send_timeout: Duration::from_millis(20),
+            heartbeat_interval: Duration::from_secs(30),
+            heartbeat_channel: "hb".to_string(),
+        });
+
+        state
+            .handle_event(ServiceEvent::Connected {
+                connection_id: 1,
+                peer: None,
+                sender: sender_a,
+                control_sender: control_sender_a,
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 1,
+                message: ClientMessage::Hello {
+                    ep_id: "recorder".to_string(),
+                },
+            })
+            .await;
+        state
+            .handle_event(ServiceEvent::Inbound {
+                connection_id: 1,
+                message: ClientMessage::Subscribe {
+                    channel: "hb".to_string(),
+                    valid_secs: 60,
+                    valid_nanos: 0,
+                },
+            })
+            .await;
+
+        state.send_heartbeat().await;
+        let OutboundMessage::Text(message) = receiver_a.try_recv().unwrap() else {
+            panic!("heartbeat must be delivered as text");
+        };
+        assert!(message.starts_with("1r|5|nexus|2|hb|"));
     }
 
     #[tokio::test]
