@@ -9,6 +9,7 @@ application {
 
 dependencies {
     api(libs.netty.http)
+    testImplementation(libs.jupiter.engine)
 }
 
 description = "easechat-client-j"

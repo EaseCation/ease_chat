@@ -43,7 +43,7 @@ public class MessageSender {
     private boolean checkHandshake(Message message) {
         if (message instanceof HelloMessage) return true;
         if (!client.isHandshake()) {
-            client.getInitChannelMessages().add(message);
+            client.enqueueInitMessage(message);
             return false;
         }
         return true;
@@ -86,7 +86,17 @@ public class MessageSender {
         if (!checkHandshake(message)) return;
         catchHandleAutoSubChannelMessage(message);
 
-        this.channel.writeAndFlush(message).addListener(result::handle);
+        this.channel.writeAndFlush(message).addListener(future -> notifyResult(future, result));
+    }
+
+    private void notifyResult(Future future, Result result) {
+        if (result == null) return;
+        try {
+            result.handle(future);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            client.getLogger().warning("Message result handler interrupted");
+        }
     }
 
     public boolean sendSyncChannelMessage(ChannelMessage message) {
@@ -136,9 +146,12 @@ public class MessageSender {
 
         @Override
         public void run() {
-            if (message.isCloseAutoSub()) this.cancel();
+            if (message.isCloseAutoSub()) {
+                this.cancel();
+                return;
+            }
 
-            MessageSender.this.sendSyncChannelMessage(message);
+            MessageSender.this.sendAsyncChannelMessage(message, null);
         }
     }
 

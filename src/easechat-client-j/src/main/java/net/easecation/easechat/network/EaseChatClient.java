@@ -16,18 +16,20 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
 public class EaseChatClient {
 
     private EventLoopGroup loopGroup;
-    private Channel channel = null;
-    private boolean isHandshake = false;
-    private MessageSender sender;
+    private volatile Channel channel = null;
+    private volatile boolean isHandshake = false;
+    private volatile MessageSender sender;
     private final MessageReceiver receiver;
     private Logger logger = new SimpleLogger();
     private final URI websocketURI;
-    private final List<Message> initChannelMessages = new ArrayList<>();
+    private final Queue<Message> initChannelMessages = new ConcurrentLinkedQueue<>();
 
     /*
      * name 用与 向服务端发起1h握手协议时必须带的参数
@@ -79,7 +81,20 @@ public class EaseChatClient {
     }
 
     public List<Message> getInitChannelMessages() {
-        return initChannelMessages;
+        return new ArrayList<>(initChannelMessages);
+    }
+
+    public void enqueueInitMessage(Message message) {
+        this.initChannelMessages.offer(message);
+    }
+
+    public List<Message> drainInitChannelMessages() {
+        List<Message> messages = new ArrayList<>();
+        Message message;
+        while ((message = this.initChannelMessages.poll()) != null) {
+            messages.add(message);
+        }
+        return messages;
     }
 
     public void start() throws Exception {
@@ -102,6 +117,8 @@ public class EaseChatClient {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel channel) {
+                        EaseChatClient.this.channel = channel;
+                        EaseChatClient.this.sender = new MessageSender(EaseChatClient.this, channel);
                         channel.pipeline()
                                 .addLast(new HttpClientCodec())
                                 .addLast(new HttpObjectAggregator(65535))
@@ -113,7 +130,6 @@ public class EaseChatClient {
                 });
         try {
             this.channel = bootstrap.connect(websocketURI.getHost(), websocketURI.getPort()).sync().channel();
-            this.sender = new MessageSender(this, channel);
             getLogger().info("Nexus WebSocket 连接成功");
         } catch (Exception e) {
             getLogger().warning("Nexus WebSocket 连接失败");
@@ -141,6 +157,7 @@ public class EaseChatClient {
                 }
             }
         }
+        this.setHandshake(false);
 
         if (this.channel != null) {
             this.channel.close();

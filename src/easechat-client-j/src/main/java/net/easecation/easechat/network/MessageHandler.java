@@ -1,6 +1,7 @@
 package net.easecation.easechat.network;
 
 import io.netty.channel.*;
+import net.easecation.easechat.api.MessageSender;
 import net.easecation.easechat.api.Message;
 import net.easecation.easechat.api.message.HelloMessage;
 import net.easecation.easechat.api.message.ReceiveMessage;
@@ -30,20 +31,31 @@ public class MessageHandler extends SimpleChannelInboundHandler<ReceiveMessage> 
         if (HANDSHAKE_COMPLETE.equals(evt)) {
             client.getLogger().info("Nexus WebSocket TCP握手完成 即将发送1h握手");
 
-            while (client.getSender() == null) {}
+            MessageSender sender = client.getSender();
+            if (sender == null) {
+                client.getLogger().warning("握手失败 未初始化 EaseChatClient Sender");
+                client.close("sender unavailable");
+                return;
+            }
 
-            client.getSender().sendSyncHelloMessage(new HelloMessage(client.getName()), future -> {
+            sender.sendAsyncHelloMessage(new HelloMessage(client.getName()), future -> {
                 if (future.isSuccess()){
                     client.setHandshake(true);
                     client.getLogger().info("1h握手数据 发送成功 开始发送握手成功前未发送的信息包");
-                    for (Message message : client.getInitChannelMessages()){
-                        client.getSender().sendSyncMessage(message);
-                        client.getLogger().info("补充发送：" + message.toString());
+                    for (Message message : client.drainInitChannelMessages()){
+                        sender.sendAsyncMessage(message, sendFuture -> {
+                            if (sendFuture.isSuccess()) {
+                                client.getLogger().info("补充发送：" + message.toString());
+                            } else if (sendFuture.cause() != null) {
+                                client.getLogger().warning("补充发送失败：" + sendFuture.cause().getMessage());
+                            } else {
+                                client.getLogger().warning("补充发送失败：Unknown reason");
+                            }
+                        });
                     }
-                    client.getInitChannelMessages().clear();
                 } else {
                     client.getLogger().warning("握手失败 即将关闭 EaseChatClient");
-                    if (!client.shutdown()) throw new InterruptedException("haha"); // 暴力关闭 -1s
+                    client.close("handshake failed");
                 }
             });
         }
